@@ -39,6 +39,8 @@ pub struct Octnode {
     ///
     /// Indices where any of the children would be outside the bounds of the containing octree, and
     /// indices that contain one of this node's parents, are invalid.
+    ///
+    /// If the signed distance of this node is zero, the node should not have children.
     pub child: u16,
 }
 
