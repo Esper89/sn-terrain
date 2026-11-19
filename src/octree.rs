@@ -61,7 +61,7 @@ impl Octree {
         unsafe { Octree::new_unchecked(nodes) }
     }
 
-    /// Create a mutable reference to an octree from a slice of nodes.
+    /// Create an exclusive reference to an octree from a slice of nodes.
     ///
     /// If the input slice is empty, returns `None`. If the input slice contains more than
     /// [`u16::MAX`] nodes, the returned octree is truncated.
@@ -132,7 +132,7 @@ impl Octree {
         unsafe { &*(nodes as *const [Octnode] as *const Octree) }
     }
 
-    /// Create a mutable reference to an octree from a slice of nodes without checking if the
+    /// Create an exclusive reference to an octree from a slice of nodes without checking if the
     /// slice's length is in range.
     ///
     /// # Safety
@@ -213,7 +213,6 @@ impl Octree {
     /// The nodes in this octree.
     ///
     /// Guaranteed to not be empty.
-    #[inline(always)]
     pub const fn nodes(&self) -> &[Octnode] { &self.nodes }
 
     /// Exclusive access to the nodes in this octree.
@@ -229,6 +228,34 @@ impl Octree {
 
         // SAFETY: `Octree` is `repr(transparent)` and has identical layout to `[Octnode]`.
         unsafe { Box::from_raw_in(nodes as *mut [Octnode], alloc) }
+    }
+
+    /// The bytes that make up the nodes in this octree.
+    ///
+    /// Guaranteed to be at least four bytes long.
+    pub const fn as_bytes(&self) -> &[u8] {
+        bytemuck::must_cast_slice(self.nodes())
+    }
+
+    /// Exclusive access to the bytes that make up the nodes in this octree.
+    ///
+    /// Guaranteed to be at least four bytes long.
+    pub const fn as_bytes_mut(&mut self) -> &mut [u8] {
+        bytemuck::must_cast_slice_mut(self.nodes_mut())
+    }
+
+    /// Consume this octree, returning the bytes that make up its nodes.
+    ///
+    /// Guaranteed to be at least four bytes long.
+    pub fn into_bytes<A: alloc::Allocator>(self: Box<Self, A>) -> Box<[u8], A> {
+        let (nodes, alloc) = Box::into_raw_with_allocator(self);
+        let nodes = nodes as *mut [Octnode];
+        let bytes = ptr::slice_from_raw_parts_mut(nodes as *mut u8, nodes.len() * 4);
+
+        // SAFETY: `Octree` is `repr(transparent)` and has identical layout to `[Octnode]`, which
+        // is four times the size of `[u8]`. `Octnode` and `u8` have the same alignment and the
+        // length of `bytes` is four times the length of `nodes`.
+        unsafe { Box::from_raw_in(bytes, alloc) }
     }
 
     /// The length of this octree in nodes.
