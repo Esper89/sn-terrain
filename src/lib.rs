@@ -15,6 +15,8 @@ mod octree;
 mod valid;
 mod voxels;
 
+pub mod ffi;
+
 pub use octree::{Octree, Octnode};
 pub use valid::{MaterialIndex, SignedDistance};
 pub use voxels::{VoxelGrid, Voxel, ValidVoxelGrid, ValidVoxel};
