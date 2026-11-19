@@ -250,7 +250,7 @@ impl Octree {
     pub fn into_bytes<A: alloc::Allocator>(self: Box<Self, A>) -> Box<[u8], A> {
         let (nodes, alloc) = Box::into_raw_with_allocator(self);
         let nodes = nodes as *mut [Octnode];
-        let bytes = ptr::slice_from_raw_parts_mut(nodes as *mut u8, nodes.len() * 4);
+        let bytes = ptr::slice_from_raw_parts_mut(nodes.cast::<u8>(), nodes.len() * 4);
 
         // SAFETY: `Octree` is `repr(transparent)` and has identical layout to `[Octnode]`, which
         // is four times the size of `[u8]`. `Octnode` and `u8` have the same alignment and the

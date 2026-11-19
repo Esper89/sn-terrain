@@ -1,4 +1,7 @@
-#![warn(missing_docs)]
+#![warn(
+    missing_docs, clippy::missing_safety_doc,
+    clippy::ptr_as_ptr, clippy::undocumented_unsafe_blocks,
+)]
 //! Subnautica modding tools for terrain editing and patching.
 //!
 //! For information on the binary formats used by this crate, see the [Subnautica terrain data

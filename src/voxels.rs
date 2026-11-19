@@ -99,7 +99,7 @@ unsafe impl bytemuck::NoUninit for ValidVoxelGrid { }
 unsafe impl bytemuck::CheckedBitPattern for ValidVoxelGrid {
     type Bits = [u16; 32 * 32 * 32];
     fn is_valid_bit_pattern(bits: &[u16; 32 * 32 * 32]) -> bool {
-        bits.iter().all(|v| ValidVoxel::is_valid_bit_pattern(v))
+        bits.iter().all(ValidVoxel::is_valid_bit_pattern)
     }
 }
 
@@ -147,7 +147,7 @@ impl ValidVoxel {
         let (mat, dist) = (MaterialIndex::new(mat), SignedDistance::new(dist));
         let (Ok(mat), Ok(dist)) = (mat, dist) else { return Err(InvalidVoxelBytes::new(bytes)) };
 
-        if mat.is_none() && dist.is_some() { return Err(InvalidVoxelBytes::new(bytes)) };
+        if mat.is_none() && dist.is_some() { return Err(InvalidVoxelBytes::new(bytes)) }
         Ok(ValidVoxel { mat, dist })
     }
 
@@ -273,6 +273,7 @@ const _: () = {
     if niches != 0 { panic!("voxel option niche optimizations picked wrong niches") }
 };
 
+#[expect(clippy::identity_op)]
 const fn voxel_grid_index([x, y, z]: [i32; 3]) -> usize {
     let [x, y, z] = [x as usize, y as usize, z as usize];
 
@@ -302,6 +303,7 @@ const fn voxel_grid_index([x, y, z]: [i32; 3]) -> usize {
     (x & 0b10000) << 10
 }
 
+#[expect(clippy::identity_op)]
 const fn voxel_grid_coords(idx: usize) -> [i32; 3] {
     // FIXME: use `extract_bits` when it's stabilized
     /*
