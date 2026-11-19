@@ -12,38 +12,6 @@ pub struct Octree {
     nodes: [Octnode],
 }
 
-/// A node in a terrain octree in the game's data format.
-///
-/// The fields may be invalid.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default, bytemuck::Pod, bytemuck::Zeroable)]
-#[repr(C, packed)]
-pub struct Octnode {
-    /// Material index of this node, or zero for an empty node.
-    ///
-    /// Byte value 255 is invalid.
-    ///
-    /// Valid material indices may not map to valid materials when used in-game, depending on which
-    /// game is running and which mods are installed. This must be handled carefully, as invalid
-    /// terrain materials can crash the game's world streamer.
-    pub mat: u8,
-
-    /// Signed distance from this node to the isosurface in range 1–252, encoded as
-    /// `d * 126 + 126`, or zero for a node that's far from the isosurface.
-    ///
-    /// Byte values 253–255 are invalid.
-    ///
-    /// If the material index of this node is zero, the signed distance should be zero too.
-    pub dist: u8,
-
-    /// Index of this node's first child in the containing octree, or zero for a leaf node.
-    ///
-    /// Indices where any of the children would be outside the bounds of the containing octree, and
-    /// indices that contain one of this node's parents, are invalid.
-    ///
-    /// If the signed distance of this node is zero, the node should not have children.
-    pub child: u16,
-}
-
 impl Octree {
     /// An octree with a single empty root node.
     pub const EMPTY: &Self = Octree::new(&[Octnode::EMPTY]);
@@ -313,6 +281,38 @@ impl<A: alloc::Allocator + Default> Default for Box<Octree, A> {
 
 impl<A: alloc::Allocator + Clone> Clone for Box<Octree, A> {
     fn clone(&self) -> Self { self.alloc_cloned(Box::allocator(self).clone()) }
+}
+
+/// A node in a terrain octree in the game's data format.
+///
+/// The fields may be invalid.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C, packed)]
+pub struct Octnode {
+    /// Material index of this node, or zero for an empty node.
+    ///
+    /// Byte value 255 is invalid.
+    ///
+    /// Valid material indices may not map to valid materials when used in-game, depending on which
+    /// game is running and which mods are installed. This must be handled carefully, as invalid
+    /// terrain materials can crash the game's world streamer.
+    pub mat: u8,
+
+    /// Signed distance from this node to the isosurface in range 1–252, encoded as
+    /// `d * 126 + 126`, or zero for a node that's far from the isosurface.
+    ///
+    /// Byte values 253–255 are invalid.
+    ///
+    /// If the material index of this node is zero, the signed distance should be zero too.
+    pub dist: u8,
+
+    /// Index of this node's first child in the containing octree, or zero for a leaf node.
+    ///
+    /// Indices where any of the children would be outside the bounds of the containing octree, and
+    /// indices that contain one of this node's parents, are invalid.
+    ///
+    /// If the signed distance of this node is zero, the node should not have children.
+    pub child: u16,
 }
 
 impl Octnode {
