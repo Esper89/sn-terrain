@@ -3,7 +3,21 @@
 //! Anything that would be of particular use to a dynamic library running in a Subnautica process
 //! can be found here.
 
-use std::{alloc, ffi, num, ptr};
+use std::{alloc, env, ffi, num, ptr};
+use crate::{error::InvalidGameDir, GameDir};
+
+/// Get the game directory of the currently running process.
+///
+/// This is intended to be called while running in Subnautica's address space, for example from a
+/// dynamic library loaded by a mod.
+pub fn current_process_game_dir() -> Result<GameDir, CurrentProcessInvalidGameDir> {
+    let dir = env::current_exe()
+        .map(|mut path| { path.pop(); path })
+        .map(|path| if path.is_empty() { ".".into() } else { path })
+        .unwrap_or(".".into());
+
+    GameDir::new(dir).map_err(CurrentProcessInvalidGameDir::new)
+}
 
 /// An allocator representing Unity's native persistent allocator.
 ///
@@ -137,5 +151,26 @@ unsafe impl alloc::Allocator for UnityAllocImpl {
             // SAFETY: `ptr` is currently allocated by this allocator.
             unsafe { (self.free)(ptr.as_ptr().cast::<ffi::c_void>()) }
         }
+    }
+}
+
+use error::*;
+pub(super) mod error {
+    use super::*;
+
+    /// The current process is not running from a valid game directory.
+    #[derive(Debug, Clone, thiserror::Error)]
+    #[error("current process not in a valid game directory: {err}")]
+    pub struct CurrentProcessInvalidGameDir {
+        err: InvalidGameDir,
+    }
+
+    impl CurrentProcessInvalidGameDir {
+        pub(super) fn new(err: InvalidGameDir) -> Self {
+            CurrentProcessInvalidGameDir { err }
+        }
+
+        /// The invalid game directory.
+        pub fn err(&self) -> &InvalidGameDir { &self.err }
     }
 }

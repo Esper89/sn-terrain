@@ -1,4 +1,5 @@
-use std::{mem, fmt};
+use std::{fmt, mem};
+use crate::Game;
 
 /// A valid one-byte material index value in the game's terrain format.
 ///
@@ -74,6 +75,140 @@ impl MaterialIndex {
     ///
     /// This is also the byte value.
     pub const fn index(self) -> u8 { self.0 as u8 }
+
+    /// If this material index is assigned and valid in an unmodded game.
+    ///
+    /// In Subnautica, most materials are assigned, and only a few are unassigned:
+    ///
+    /// - Assigned: 1–94, 97–106, 109–116, 120, 124–133, 140–167, 170–176, 180–254; total **233**.
+    /// - Unassigned: 95, 96, 107, 108, 117–119, 121–123, 134–139, 168, 169, 177–179; total **21**.
+    ///
+    /// Whereas in Below Zero, more materials are unassigned than assigned:
+    ///
+    /// - Assigned: 1, 85–93, 100–107, 109–114, 121–139, 150–155, 159–180, 182–185, 200–202,
+    ///   205–214, 217–241, 250; total **114**.
+    /// - Unassigned: 2–84, 94–99, 108, 115–120, 140–149, 156–158, 181, 186–199, 203, 204, 215, 216,
+    ///   242–249, 251–254; total **140**.
+    ///
+    /// Note that a material being valid or invalid in-game depends not only on which game is
+    /// running, but also on the set of installed mods. Invalid terrain materials must be handled
+    /// carefully, as they can crash the game's world streamer.
+    pub const fn is_vanilla(self, game: Game) -> bool {
+        match game {
+            Game::Subnautica => match self.index() {
+                1..=94 | 97..=106 | 109..=116 | 120 | 124..=133 | 140..=167 | 170..=176 | 180..=254
+                    => true,
+
+                95 | 96 | 107 | 108 | 117..=119 | 121..=123 | 134..=139 | 168 | 169 | 177..=179
+                    => false,
+
+                0 | 255 => unreachable!(),
+            },
+
+            Game::BelowZero => match self.index() {
+                1 | 85..=93 | 100..=107 | 109..=114 | 121..=139 | 150..=155 | 159..=180 |
+                182..=185 | 200..=202 | 205..=214 | 217..=241 | 250
+                    => true,
+
+                2..=84 | 94..=99 | 108 | 115..=120 | 140..=149 | 156..=158 | 181 | 186..=199 | 203 |
+                204 | 215 | 216 | 242..=249 | 251..=254
+                    => false,
+
+                0 | 255 => unreachable!(),
+            },
+        }
+    }
+
+    /// All material indices, 1–254.
+    pub const fn all() -> &'static [Self; 254] {
+        seq_macro::seq!(N in 1..=254 {
+            const { &[#(MaterialIndex::new_const::<N>(),)*] }
+        })
+    }
+
+    /// All material indices that are assigned and valid in an unmodded game.
+    ///
+    /// Subnautica has a total of **233** assigned materials: 1–94, 97–106, 109–116, 120, 124–133,
+    /// 140–167, 170–176, 180–254.
+    ///
+    /// Below Zero has a total of **114** assigned materials: 1, 85–93, 100–107, 109–114, 121–139,
+    /// 150–155, 159–180, 182–185, 200–202, 205–214, 217–241, 250.
+    ///
+    /// Note that a material being valid or invalid in-game depends not only on which game is
+    /// running, but also on the set of installed mods. Invalid terrain materials must be handled
+    /// carefully, as they can crash the game's world streamer.
+    pub const fn all_vanilla(game: Game) -> &'static [Self] {
+        macro_rules! mats {
+            ($($n:literal),* $(,)?) => {
+                const { &[$(MaterialIndex::new_const::<$n>()),*] }
+            };
+        }
+
+        match game {
+            Game::Subnautica => mats![
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+                24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
+                45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65,
+                66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86,
+                87, 88, 89, 90, 91, 92, 93, 94, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 109,
+                110, 111, 112, 113, 114, 115, 116, 120, 124, 125, 126, 127, 128, 129, 130, 131, 132,
+                133, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155,
+                156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 170, 171, 172, 173, 174,
+                175, 176, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194,
+                195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211,
+                212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228,
+                229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245,
+                246, 247, 248, 249, 250, 251, 252, 253, 254,
+            ],
+
+            Game::BelowZero => mats![
+                1, 85, 86, 87, 88, 89, 90, 91, 92, 93, 100, 101, 102, 103, 104, 105, 106, 107, 109,
+                110, 111, 112, 113, 114, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132,
+                133, 134, 135, 136, 137, 138, 139, 150, 151, 152, 153, 154, 155, 159, 160, 161, 162,
+                163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179,
+                180, 182, 183, 184, 185, 200, 201, 202, 205, 206, 207, 208, 209, 210, 211, 212, 213,
+                214, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232,
+                233, 234, 235, 236, 237, 238, 239, 240, 241, 250,
+            ],
+        }
+    }
+
+    /// All material indices that are unassigned and invalid in an unmodded game.
+    ///
+    /// Subnautica has a total of **21** unassigned materials: 95, 96, 107, 108, 117–119, 121–123,
+    /// 134–139, 168, 169, 177–179.
+    ///
+    /// Below Zero has a total of **140** unassigned materials: 2–84, 94–99, 108, 115–120, 140–149,
+    /// 156–158, 181, 186–199, 203, 204, 215, 216, 242–249, 251–254.
+    ///
+    /// Note that a material being valid or invalid in-game depends not only on which game is
+    /// running, but also on the set of installed mods. Invalid terrain materials must be handled
+    /// carefully, as they can crash the game's world streamer.
+    pub const fn all_vanilla_unassigned(game: Game) -> &'static [Self] {
+        macro_rules! mats {
+            ($($n:literal),* $(,)?) => {
+                const { &[$(MaterialIndex::new_const::<$n>()),*] }
+            };
+        }
+
+        match game {
+            Game::Subnautica => mats![
+                95, 96, 107, 108, 117, 118, 119, 121, 122, 123, 134, 135, 136, 137, 138, 139, 168,
+                169, 177, 178, 179,
+            ],
+
+            Game::BelowZero => mats![
+                2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+                25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
+                46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66,
+                67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 94, 95, 96,
+                97, 98, 99, 108, 115, 116, 117, 118, 119, 120, 140, 141, 142, 143, 144, 145, 146,
+                147, 148, 149, 156, 157, 158, 181, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195,
+                196, 197, 198, 199, 203, 204, 215, 216, 242, 243, 244, 245, 246, 247, 248, 249, 251,
+                252, 253, 254,
+            ],
+        }
+    }
 }
 
 impl fmt::Display for MaterialIndex {
@@ -424,5 +559,36 @@ pub(super) mod error {
 
         /// The invalid byte, in range 253–255.
         pub const fn byte(&self) -> u8 { self.0 as u8 }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn material_index_all_vanilla() {
+        let (mut sn_a, mut sn_u, mut bz_a, mut bz_u) = (
+            MaterialIndex::all_vanilla(Game::Subnautica),
+            MaterialIndex::all_vanilla_unassigned(Game::Subnautica),
+            MaterialIndex::all_vanilla(Game::BelowZero),
+            MaterialIndex::all_vanilla_unassigned(Game::BelowZero),
+        );
+
+        for mat in MaterialIndex::all() {
+            let sn = if mat.is_vanilla(Game::Subnautica) { &mut sn_a } else { &mut sn_u };
+            let bz = if mat.is_vanilla(Game::BelowZero) { &mut bz_a } else { &mut bz_u };
+
+            for slice in [sn, bz] {
+                let Some((first, rest)) = slice.split_first() else { panic!("too short") };
+                assert_eq!(mat, first);
+                *slice = rest;
+            }
+        }
+
+        assert_eq!(sn_a, &[]);
+        assert_eq!(sn_u, &[]);
+        assert_eq!(bz_a, &[]);
+        assert_eq!(bz_u, &[]);
     }
 }

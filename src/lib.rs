@@ -14,12 +14,14 @@
 #[cfg(not(target_endian = "little"))]
 compile_error!("big-endian targets are not supported");
 
+mod game;
 mod octree;
 mod valid;
 mod voxels;
 
 pub mod ffi;
 
+pub use game::{GameDir, Game};
 pub use octree::{Octree, Octnode};
 pub use valid::{MaterialIndex, SignedDistance};
 pub use voxels::{VoxelGrid, Voxel, ValidVoxelGrid, ValidVoxel};
@@ -27,6 +29,8 @@ pub use voxels::{VoxelGrid, Voxel, ValidVoxelGrid, ValidVoxel};
 pub mod error {
     //! Error types produced in this crate.
 
+    pub use super::ffi::error::*;
+    pub use super::game::error::*;
     pub use super::valid::error::*;
     pub use super::voxels::error::*;
 }
