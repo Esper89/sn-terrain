@@ -208,3 +208,23 @@ macro_rules! pathlit {
     };
 }
 use pathlit;
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn autodetect() {
+        let sn = GameDir::new("tests/cases/game/sn").expect("game dir should open");
+        let bz = GameDir::new("tests/cases/game/bz").expect("game dir should open");
+
+        assert_eq!(sn.game(), Game::Subnautica);
+        assert_eq!(bz.game(), Game::BelowZero);
+
+        assert!(sn.terrain_dir().join("compiled-batch-0-0-0.optoctrees").is_file());
+        assert!(bz.terrain_dir().join("compiled-batch-0-0-0.optoctrees").is_file());
+
+        assert!(sn.bepinex_dir().is_some());
+        assert!(bz.bepinex_dir().is_none());
+    }
+}
