@@ -440,17 +440,17 @@ impl SignedDistance {
 
     /// If this signed distance value indicates an interior point.
     ///
-    /// [`HALF`](SignedDistance::HALF) is not considered interior.
+    /// [`HALF`](SignedDistance::HALF) is considered interior.
     ///
     /// Guaranteed to be the opposite of [`is_exterior`](SignedDistance::is_exterior).
-    pub const fn is_interior(self) -> bool { self.is_positive() }
+    pub const fn is_interior(self) -> bool { !self.is_exterior() }
 
     /// If this signed distance value indicates an exterior point.
     ///
-    /// [`HALF`](SignedDistance::HALF) is considered exterior.
+    /// [`HALF`](SignedDistance::HALF) is not considered exterior.
     ///
     /// Guaranteed to be the opposite of [`is_interior`](SignedDistance::is_interior).
-    pub const fn is_exterior(self) -> bool { !self.is_interior() }
+    pub const fn is_exterior(self) -> bool { self.is_negative() }
 
     /// The minimum of two signed distance values.
     pub const fn min(self, other: Self) -> Self {
