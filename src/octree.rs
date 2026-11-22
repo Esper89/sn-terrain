@@ -614,6 +614,7 @@ const fn const_deref_thin_arc(arc: &ThinArc<(), Octnode>) -> &[Octnode] {
     &data.slice
 }
 
+#[cfg(feature = "ffi")]
 impl crate::ffi::SharedOctreeExt for SharedOctree {
     fn into_ptr(self) -> *const Octree {
         if !self.is_inline() {

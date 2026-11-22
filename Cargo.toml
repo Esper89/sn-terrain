@@ -9,6 +9,12 @@ keywords = ["subnautica", "modding", "terrain", "octrees"]
 categories = ["game-development"]
 publish = false
 
+[package.metadata.docs.rs]
+all-features = true
+
+[features]
+ffi = []
+
 [dependencies]
 bytemuck = { version = "1.25", features = ["derive", "extern_crate_std", "latest_stable_rust"] }
 seq-macro = "0.3"

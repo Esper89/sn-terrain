@@ -2,6 +2,8 @@
 //!
 //! Anything that would be of particular use to a dynamic library running in a Subnautica process
 //! can be found here.
+//!
+//! This module requires the `ffi` crate feature.
 
 use std::{alloc, env, ffi, num, ptr};
 use crate::{error::InvalidGameDir, GameDir, Octree, SharedOctree};

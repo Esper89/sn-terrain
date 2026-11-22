@@ -8,6 +8,13 @@
 //! format][data-fmt] specification and the [Subnautica terrain patch format][patch-fmt]
 //! specification.
 //!
+//! # Flags
+//!
+//! This crate has the following feature flags:
+//!
+#![cfg_attr(feature = "ffi", doc = "- `ffi` enables the [`ffi`] module.")]
+#![cfg_attr(not(feature = "ffi"), doc = "- `ffi` enables the `ffi` module.")]
+//!
 //! [data-fmt]: https://esper89.github.io/Subnautica-TerrainPatcher/docs/terrain-data-format.html
 //! [patch-fmt]: https://esper89.github.io/Subnautica-TerrainPatcher/docs/terrain-patch-format.html
 
@@ -19,7 +26,7 @@ mod octree;
 mod valid;
 mod voxels;
 
-pub mod ffi;
+#[cfg(feature = "ffi")] pub mod ffi;
 
 pub use game::{GameDir, Game};
 pub use octree::{Octree, SharedOctree, Octnode};
@@ -29,7 +36,7 @@ pub use voxels::{VoxelGrid, Voxel, ValidVoxelGrid, ValidVoxel};
 pub mod error {
     //! Error types produced in this crate.
 
-    pub use super::ffi::error::*;
+    #[cfg(feature = "ffi")] pub use super::ffi::error::*;
     pub use super::game::error::*;
     pub use super::valid::error::*;
     pub use super::voxels::error::*;
