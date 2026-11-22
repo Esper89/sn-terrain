@@ -73,7 +73,7 @@ impl MaterialIndex {
 
     /// The value of the material index.
     ///
-    /// This is also the byte value.
+    /// This is also the byte value. Guaranteed to be in range 1–254.
     pub const fn index(self) -> u8 { self.0 as u8 }
 
     /// If this material index is assigned and valid in an unmodded game.
@@ -262,7 +262,7 @@ impl fmt::Display for ValidMaterialByte {
 /// A valid one-byte signed distance value in the game's terrain format.
 ///
 /// This value is guaranteed to have a byte value in the range 1–252, representing a signed distance
-/// in the range (−1.0, 1.0].
+/// in the range (−1.0, +1.0].
 ///
 /// `Option<SignedDistance>::None` is guaranteed to be represented as byte value 0.
 #[derive(
@@ -413,6 +413,8 @@ impl SignedDistance {
     }
 
     /// The byte value of this signed distance.
+    ///
+    /// Guaranteed to be in range 1–252.
     pub const fn byte(self) -> u8 { self.0 as u8 }
 
     /// The numeric value of this signed distance, as a signed integer fraction over 126.
@@ -441,17 +443,33 @@ impl SignedDistance {
 
     /// If this signed distance value indicates an interior point.
     ///
-    /// [`HALF`](SignedDistance::HALF) is considered interior.
+    /// [`HALF`](SignedDistance::HALF) is not considered interior because interiority is defined
+    /// based on the [signed distance invariant](crate::Octree#signed-distance-invariant).
     ///
     /// Guaranteed to be the opposite of [`is_exterior`](SignedDistance::is_exterior).
-    pub const fn is_interior(self) -> bool { !self.is_exterior() }
+    pub const fn is_interior(self) -> bool { self.is_positive() }
 
     /// If this signed distance value indicates an exterior point.
     ///
-    /// [`HALF`](SignedDistance::HALF) is not considered exterior.
+    /// [`HALF`](SignedDistance::HALF) is considered exterior because exteriority is defined
+    /// based on the [signed distance invariant](crate::Octree#signed-distance-invariant).
     ///
     /// Guaranteed to be the opposite of [`is_interior`](SignedDistance::is_interior).
-    pub const fn is_exterior(self) -> bool { self.is_negative() }
+    pub const fn is_exterior(self) -> bool { !self.is_interior() }
+
+    /// If this signed distance value will apear in-game as having terrain.
+    ///
+    /// [`HALF`](SignedDistance::HALF) has terrain.
+    ///
+    /// Guaranteed to be the opposite of [`has_no_terrain`](SignedDistance::has_no_terrain).
+    pub const fn has_terrain(self) -> bool { !self.has_no_terrain() }
+
+    /// If this signed distance value will apear in-game as having no terrain.
+    ///
+    /// [`HALF`](SignedDistance::HALF) has terrain.
+    ///
+    /// Guaranteed to be the opposite of [`has_terrain`](SignedDistance::has_terrain).
+    pub const fn has_no_terrain(self) -> bool { self.is_negative() }
 
     /// The minimum of two signed distance values.
     pub const fn min(self, other: Self) -> Self {

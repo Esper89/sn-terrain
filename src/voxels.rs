@@ -7,6 +7,8 @@ use crate::{MaterialIndex, SignedDistance};
 /// invalid; for a voxel grid that's always valid, see [`ValidVoxelGrid`].
 ///
 /// This type is both [`Copy`] and quite large. Be careful with moving it by value.
+///
+#[doc = include_str!("dist-invariant.md")]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C, align(64))]
 pub struct VoxelGrid(pub [Voxel; 32 * 32 * 32]);
@@ -67,6 +69,8 @@ impl Voxel {
 /// guaranteed to be valid; for voxels that may be invalid, see [`VoxelGrid`].
 ///
 /// This type is both [`Copy`] and quite large. Be careful with moving it by value.
+///
+#[doc = include_str!("dist-invariant.md")]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, bytemuck::Zeroable)]
 #[repr(C, align(64))]
 pub struct ValidVoxelGrid(pub [ValidVoxel; 32 * 32 * 32]);
@@ -209,6 +213,9 @@ impl ValidVoxel {
 
     /// If this voxel indicates an interior point.
     ///
+    /// Interiority is defined based on the [signed distance
+    /// invariant](ValidVoxelGrid#signed-distance-invariant).
+    ///
     /// Guaranteed to be the opposite of [`is_exterior`](ValidVoxel::is_exterior).
     pub const fn is_interior(self) -> bool {
         match self.dist {
@@ -219,8 +226,26 @@ impl ValidVoxel {
 
     /// If this voxel indicates an exterior point.
     ///
+    /// Exteriority is defined based on the [signed distance
+    /// invariant](ValidVoxelGrid#signed-distance-invariant).
+    ///
     /// Guaranteed to be the opposite of [`is_interior`](ValidVoxel::is_interior).
     pub const fn is_exterior(self) -> bool { !self.is_interior() }
+
+    /// If this voxel will apear in-game as containing terrain.
+    ///
+    /// Guaranteed to be the opposite of [`has_no_terrain`](ValidVoxel::has_no_terrain).
+    pub const fn has_terrain(self) -> bool {
+        match self.dist {
+            Some(dist) => dist.has_terrain(),
+            None => self.mat.is_some(),
+        }
+    }
+
+    /// If this voxel will appear in-game as containing no terrain.
+    ///
+    /// Guaranteed to be the opposite of [`has_terrain`](ValidVoxel::has_terrain).
+    pub const fn has_no_terrain(self) -> bool { !self.has_terrain() }
 
     /// If this voxel is completely empty of terrain and far from the surface.
     ///

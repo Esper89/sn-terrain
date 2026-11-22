@@ -7,6 +7,8 @@ use triomphe::ThinArc;
 /// least one node and at most [`u16::MAX`] nodes.
 ///
 /// This type is a dynamically-sized wrapper around a slice of [`Octnode`]s.
+///
+#[doc = include_str!("dist-invariant.md")]
 #[derive(Debug)]
 #[repr(transparent)]
 pub struct Octree {
@@ -381,6 +383,8 @@ impl<A: alloc::Allocator + Clone> Clone for Box<Octree, A> {
 /// [`Octnode`]s. Single-node octrees (containing only a root node) are stored inline instead of
 /// using a heap-allocated buffer. On both 32- and 64-bit platforms, both this type and an
 /// [`Option`] of it are 8 bytes.
+///
+/// `Option<SharedOctree>::None` is guaranteed to be represented as all-zero bytes.
 #[repr(C)]
 pub struct SharedOctree {
     // INVARIANT: `ptr` may not be constructed from a pointer with provenance at compile-time.
