@@ -4,7 +4,7 @@
 //! can be found here.
 
 use std::{alloc, env, ffi, num, ptr};
-use crate::{error::InvalidGameDir, GameDir};
+use crate::{error::InvalidGameDir, GameDir, Octree, SharedOctree};
 
 /// Get the game directory of the currently running process.
 ///
@@ -18,6 +18,39 @@ pub fn current_process_game_dir() -> Result<GameDir, CurrentProcessInvalidGameDi
 
     GameDir::new(dir).map_err(CurrentProcessInvalidGameDir::new)
 }
+
+/// Extended functionality for shared octrees.
+pub trait SharedOctreeExt: Sized + seal_shared_octree_ext::Sealed {
+    /// Consume this shared octree, returning a stable pointer to it.
+    ///
+    /// The pointer must not be written to, but will remain valid for reads until it's passed to
+    /// [`from_ptr`](SharedOctreeExt::from_ptr).
+    ///
+    /// Inline octrees may have their invalid fields modified.
+    fn into_ptr(self) -> *const Octree;
+
+    /// Create a shared octree from a pointer produced by [`into_ptr`](SharedOctreeExt::into_ptr).
+    ///
+    /// The pointer (and pointers derived from it) are no longer valid for reads after calling this
+    /// function.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must have been returned from a previous call to
+    /// [`into_ptr`](SharedOctreeExt::into_ptr) and must still be valid. The same pointer may not
+    /// be passed to this function multiple times.
+    unsafe fn from_ptr(ptr: *const Octree) -> Self;
+}
+
+mod seal_shared_octree_ext {
+    // SAFETY: The type must be `SharedOctree` and the implementation of `SharedOctreeExt` must be
+    // correct.
+    pub unsafe trait Sealed { }
+}
+use seal_shared_octree_ext::Sealed as SharedOctreeExtSealed;
+
+// SAFETY: The type is `SharedOctree` and the implementation of `SharedOctreeExt` is correct.
+unsafe impl SharedOctreeExtSealed for SharedOctree { }
 
 /// An allocator representing Unity's native persistent allocator.
 ///

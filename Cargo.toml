@@ -13,3 +13,4 @@ publish = false
 bytemuck = { version = "1.25", features = ["derive", "extern_crate_std", "latest_stable_rust"] }
 seq-macro = "0.3"
 thiserror = "2.0"
+triomphe = "=0.1.17"

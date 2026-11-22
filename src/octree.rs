@@ -1,11 +1,13 @@
-use std::{alloc, num::NonZero, ptr};
+use std::{alloc, fmt, mem, num::NonZero, ops, ptr};
+use triomphe::ThinArc;
 
 /// A terrain octree in the game's data format.
 ///
-/// The octree structure and data contained may be invalid.
+/// The octree structure and data contained may be invalid. Each octree is guaranteed to contain at
+/// least one node and at most [`u16::MAX`] nodes.
 ///
-/// Each octree is guaranteed to contain at least one node and at most [`u16::MAX`] nodes.
-#[derive(Debug, Eq, PartialEq, Hash)]
+/// This type is a dynamically-sized wrapper around a slice of [`Octnode`]s.
+#[derive(Debug)]
 #[repr(transparent)]
 pub struct Octree {
     // INVARIANT: The length of `nodes` must fit in a `NonZero<u16>`.
@@ -14,14 +16,14 @@ pub struct Octree {
 
 impl Octree {
     /// An octree with a single empty root node.
-    pub const EMPTY: &Self = Octree::new(&[Octnode::EMPTY]);
+    pub const EMPTY: &Self = Octree::new_array(&[Octnode::EMPTY]);
 
     /// Create a reference to an octree from a slice of nodes.
     ///
     /// If the input slice is empty, the returned octree has a single empty root node. If the input
     /// slice contains more than [`u16::MAX`] nodes, the returned octree is truncated.
     pub const fn new(nodes: &[Octnode]) -> &Self {
-        let nodes = if nodes.is_empty() { &[Octnode::EMPTY] } else { nodes };
+        if nodes.is_empty() { return Octree::EMPTY }
         let len = if nodes.len() > u16::MAX as usize { u16::MAX as usize } else { nodes.len() };
         let (nodes, _) = nodes.split_at(len);
 
@@ -131,6 +133,41 @@ impl Octree {
         unsafe { Box::from_raw_in(ptr as *mut Octree, alloc) }
     }
 
+    /// Create a reference to an octree from a fixed-length array of nodes.
+    ///
+    /// If the input array is empty or contains more than [`u16::MAX`] nodes, this will panic at
+    /// compile-time.
+    pub const fn new_array<const N: usize>(nodes: &[Octnode; N]) -> &Self {
+        const { if N == 0 || N > u16::MAX as usize { panic!("invalid octree length") } }
+
+        // SAFETY: The length of `nodes` fits in a `NonZero<u16>`.
+        unsafe { Octree::new_unchecked(nodes) }
+    }
+
+    /// Create an exclusive reference to an octree from a fixed-length array of nodes.
+    ///
+    /// If the input array is empty or contains more than [`u16::MAX`] nodes, this will panic at
+    /// compile-time.
+    pub const fn new_array_mut<const N: usize>(nodes: &mut [Octnode; N]) -> &mut Self {
+        const { if N == 0 || N > u16::MAX as usize { panic!("invalid octree length") } }
+
+        // SAFETY: The length of `nodes` fits in a `NonZero<u16>`.
+        unsafe { Octree::new_unchecked_mut(nodes) }
+    }
+
+    /// Create a boxed octree from a fixed-length boxed array of nodes.
+    ///
+    /// If the input array is empty or contains more than [`u16::MAX`] nodes, this will panic at
+    /// compile-time.
+    pub fn new_array_boxed<const N: usize, A: alloc::Allocator>(
+        nodes: Box<[Octnode; N], A>
+    ) -> Box<Self, A> {
+        const { if N == 0 || N > u16::MAX as usize { panic!("invalid octree length") } }
+
+        // SAFETY: The length of `nodes` fits in a `NonZero<u16>`.
+        unsafe { Octree::new_unchecked_boxed(nodes) }
+    }
+
     /// Allocate a boxed octree with `len` empty nodes.
     pub fn alloc_zeroed<A: alloc::Allocator>(len: NonZero<u16>, alloc: A) -> Box<Self, A> {
         let len = len.get() as usize;
@@ -176,6 +213,63 @@ impl Octree {
         // SAFETY: `ptr` was just allocated in `alloc`. The nodes were initialized by copying from
         // `self.nodes`. The length of the slice pointer is correct and fits in a `NonZero<u16>`.
         unsafe { Box::from_raw_in(ptr, alloc) }
+    }
+
+    /// Parse a reference to an octree from a slice of bytes, returning the remaining bytes.
+    ///
+    /// The first two bytes are interpreted as the (little-endian) length of the octree. If the
+    /// octree would be longer than the remaining bytes, it is truncated. If the octree would have
+    /// zero nodes, a single-node empty octree is returned instead.
+    ///
+    /// If the input contains less than two bytes, `None` is returned and zero remaining bytes are
+    /// returned.
+    pub const fn parse(bytes: &[u8]) -> (Option<&Self>, &[u8]) {
+        let [len_a, len_b, bytes @ ..] = bytes else { return (None, &[]) };
+        let len = u16::from_le_bytes([*len_a, *len_b]);
+
+        let split = len as usize * 4;
+        let split = if split > bytes.len() { bytes.len() & !3 } else { split };
+        let (bytes, rem) = bytes.split_at(split);
+
+        // SAFETY: `bytes.len()` is a multiple of 4.
+        let nodes = unsafe { bytes.as_chunks_unchecked::<4>() };
+        let nodes = bytemuck::must_cast_slice::<[u8; 4], Octnode>(nodes);
+
+        if nodes.is_empty() {
+            (Some(Octree::EMPTY), rem)
+        } else {
+            // SAFETY: `nodes` is not empty and its length is derived from a `u16`.
+            unsafe { (Some(Octree::new_unchecked(nodes)), rem) }
+        }
+    }
+
+    /// Parse an exclusive reference to an octree from a slice of bytes, returning the remaining
+    /// bytes.
+    ///
+    /// The first two bytes are interpreted as the (little-endian) length of the octree. If the
+    /// octree would be longer than the remaining bytes, it is truncated. If the octree would have
+    /// zero nodes, `None` is returned instead.
+    ///
+    /// If the input contains less than two bytes, `None` is returned and zero remaining bytes are
+    /// returned.
+    pub const fn parse_mut(bytes: &mut [u8]) -> (Option<&mut Self>, &mut [u8]) {
+        let [len_a, len_b, bytes @ ..] = bytes else { return (None, &mut []) };
+        let len = u16::from_le_bytes([*len_a, *len_b]);
+
+        let split = len as usize * 4;
+        let split = if split > bytes.len() { bytes.len() & !3 } else { split };
+        let (bytes, rem) = bytes.split_at_mut(split);
+
+        // SAFETY: `bytes.len()` is a multiple of 4.
+        let nodes = unsafe { bytes.as_chunks_unchecked_mut::<4>() };
+        let nodes = bytemuck::must_cast_slice_mut::<[u8; 4], Octnode>(nodes);
+
+        if nodes.is_empty() {
+            (None, rem)
+        } else {
+            // SAFETY: `nodes` is not empty and its length is derived from a `u16`.
+            unsafe { (Some(Octree::new_unchecked_mut(nodes)), rem) }
+        }
     }
 
     /// The nodes in this octree.
@@ -246,14 +340,9 @@ impl Octree {
     ///
     /// If the node is not part of this octree, this function may panic, return `None`, or return
     /// nonsense.
-    #[cfg_attr(debug_assertions, track_caller)]
     #[inline(always)]
     pub fn node_children(&self, node: &Octnode) -> Option<&[Octnode; 8]> {
-        #[cfg(debug_assertions)]
-        if self.nodes.element_offset(node).is_none() {
-            panic!("node is not in octree")
-        }
-
+        debug_assert!(self.nodes.element_offset(node).is_some(), "node is not in octree");
         if node.child == 0 { None } else { self.nodes.get(node.child as usize..)?.first_chunk() }
     }
 }
@@ -283,9 +372,299 @@ impl<A: alloc::Allocator + Clone> Clone for Box<Octree, A> {
     fn clone(&self) -> Self { self.alloc_cloned(Box::allocator(self).clone()) }
 }
 
+/// A cheaply-clonable immutable shared terrain octree in the game's data format.
+///
+/// The octree structure and data contained may be invalid. Each octree is guaranteed to contain at
+/// least one node and at most [`u16::MAX`] nodes.
+///
+/// This type is implemented as a thin pointer to a reference-counted buffer holding a slice of
+/// [`Octnode`]s. Single-node octrees (containing only a root node) are stored inline instead of
+/// using a heap-allocated buffer. On both 32- and 64-bit platforms, both this type and an
+/// [`Option`] of it are 8 bytes.
+#[repr(C)]
+pub struct SharedOctree {
+    // INVARIANT: `ptr` may not be constructed from a pointer with provenance at compile-time.
+
+    // INVARIANT: If the address of `ptr` is a multiple of two, `ptr` must be a valid pointer
+    // created by transmuting `ThinArc<(), Octnode>`. The length of the corresponding `[Octnode]`
+    // slice must fit in a `NonZero<u16>` and must be at least 2 nodes.
+
+    ptr: ptr::NonNull<()>,
+    pad: [u8; {
+        5usize
+            .next_multiple_of(mem::align_of::<ptr::NonNull<()>>())
+            .saturating_sub(mem::size_of::<ptr::NonNull<()>>())
+    }],
+}
+
+impl SharedOctree {
+    /// An octree with a single empty root node.
+    pub const EMPTY: Self = SharedOctree {
+        ptr: ptr::NonNull::without_provenance(NonZero::<usize>::MIN),
+        pad: [0; _],
+    };
+
+    /// Copy an octree into a shared buffer.
+    pub fn new(octree: &Octree) -> Self {
+        if octree.len().get() == 1 {
+            SharedOctree::new_inline([*octree.root()])
+        } else {
+            SharedOctree::new_heap(ThinArc::from_header_and_slice((), octree.nodes()))
+        }
+    }
+
+    /// Construct an octree from a single root node.
+    ///
+    /// This can be used at compile-time. The root node is stored inline.
+    pub const fn from_root(root: Octnode) -> Self { SharedOctree::new_inline([root]) }
+
+    /// Get a reference to the underlying octree.
+    ///
+    /// This type already [`Deref`](ops::Deref)-coerces to [`Octree`]. Unlike deref coercion, this
+    /// method can be used at compile-time.
+    pub const fn as_octree(&self) -> &Octree {
+        match self.unpack_ref() {
+            SharedOctreeRef::Inline(nodes) => Octree::new_array(nodes),
+            SharedOctreeRef::Heap(nodes) => {
+                let nodes = const_deref_thin_arc(nodes);
+
+                // SAFETY: The length of `nodes` fits in a `NonZero<u16>` per invariants.
+                unsafe { Octree::new_unchecked(nodes) }
+            },
+        }
+    }
+
+    /// The reference count of the underlying shared octree buffer.
+    ///
+    /// If this octree is stored inline instead of in a reference-counted buffer, this returns zero.
+    pub fn ref_count(&self) -> usize {
+        match self.unpack_ref() {
+            SharedOctreeRef::Inline(_) => 0,
+            SharedOctreeRef::Heap(arc) => ThinArc::strong_count(arc),
+        }
+    }
+
+    /// Compare reference equality of two shared octrees.
+    ///
+    /// Returns if the two octrees refer to the same data. Octrees that point to the same shared
+    /// heap buffer are reference-equal. Inline octrees that contain the same value are also
+    /// reference-equal.
+    pub fn ref_eq(&self, other: &Self) -> bool {
+        match (self.unpack_ref(), other.unpack_ref()) {
+            (SharedOctreeRef::Inline(lhs), SharedOctreeRef::Inline(rhs))
+                => lhs == rhs,
+
+            (SharedOctreeRef::Heap(lhs), SharedOctreeRef::Heap(rhs))
+                => lhs.heap_ptr().addr() == rhs.heap_ptr().addr(),
+
+            _ => false,
+        }
+    }
+
+    const fn new_inline(nodes: [Octnode; 1]) -> Self {
+        let mut octree = SharedOctree::EMPTY;
+
+        // SAFETY: `SharedOctree` is always at least 5 bytes in size, which is 1 byte larger than
+        // `Octnode`. All bytes of `SharedOctree` are always initialized. `Octnode` is
+        // `bytemuck::Pod`. The first byte of `SharedOctree::EMPTY` is non-zero and is not mutated
+        // by this operation, so `octree.ptr` does not become zero.
+        unsafe {
+            let inline = &mut *(&raw mut octree).cast::<[Octnode; 1]>().byte_add(1);
+            *inline = nodes;
+        }
+
+        octree
+    }
+
+    fn new_heap(nodes: ThinArc<(), Octnode>) -> Self {
+        // SAFETY: `ThinArc` is currently implemented as a `repr(transparent)` wrapper around
+        // `ptr::NonNull`. We depend on an exact version of `triomphe` to prevent this from
+        // changing.
+        let ptr = unsafe { mem::transmute::<ThinArc<(), Octnode>, ptr::NonNull<()>>(nodes) };
+
+        debug_assert!(ptr.addr().get().is_multiple_of(2));
+        SharedOctree { pad: [0; _], ptr }
+    }
+
+    const fn is_inline(&self) -> bool {
+        // SAFETY: If this function is running at compile-time, per invariants, it is not possible
+        // for `self.ptr` to be a pointer with provenance; it must have been constructed from an
+        // integer.
+        let addr = unsafe { mem::transmute::<ptr::NonNull<()>, usize>(self.ptr) };
+
+        !addr.is_multiple_of(2)
+    }
+
+    const fn unpack_ref(&self) -> SharedOctreeRef<'_> {
+        if self.is_inline() {
+            // SAFETY: `SharedOctree` is always at least 5 bytes in size, which is 1 byte larger
+            // than `Octnode`. All bytes of `SharedOctree` aside from trailing padding are always
+            // initialized. `Octnode` is `bytemuck::Pod`.
+            let nodes = unsafe {
+                &*(self as *const SharedOctree).cast::<[Octnode; 1]>().byte_add(1)
+            };
+            SharedOctreeRef::Inline(nodes)
+        } else {
+            // SAFETY: `ThinArc` is currently implemented as a `repr(transparent)` wrapper around
+            // `ptr::NonNull`. We depend on an exact version of `triomphe` to prevent this from
+            // changing.
+            let arc = unsafe { &*(&raw const self.ptr).cast::<ThinArc<(), Octnode>>() };
+            SharedOctreeRef::Heap(arc)
+        }
+    }
+}
+
+enum SharedOctreeRef<'a> {
+    Inline(&'a [Octnode; 1]),
+    Heap(&'a ThinArc<(), Octnode>),
+}
+
+impl Drop for SharedOctree {
+    fn drop(&mut self) {
+        if !self.is_inline() {
+            // SAFETY: `ThinArc` is currently implemented as a `repr(transparent)` wrapper around
+            // `ptr::NonNull`. We depend on an exact version of `triomphe` to prevent this from
+            // changing.
+            let arc = unsafe { &mut *(&raw mut self.ptr).cast::<ThinArc<(), Octnode>>() };
+
+            // SAFETY: `Drop::drop` is only ever called once.
+            unsafe { ptr::drop_in_place(arc) };
+        }
+    }
+}
+
+impl ops::Deref for SharedOctree {
+    type Target = Octree;
+    fn deref(&self) -> &Octree { self.as_octree() }
+}
+
+impl fmt::Debug for SharedOctree {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("SharedOctree").field(&self.as_octree()).finish()
+    }
+}
+
+impl Clone for SharedOctree {
+    fn clone(&self) -> Self {
+        match self.unpack_ref() {
+            SharedOctreeRef::Inline(nodes) => SharedOctree::new_inline(*nodes),
+            SharedOctreeRef::Heap(nodes) => SharedOctree::new_heap(nodes.clone()),
+        }
+    }
+}
+
+impl Default for SharedOctree {
+    fn default() -> Self { SharedOctree::EMPTY }
+}
+
+// SAFETY: `Option<SharedOctree>::None` is `0` per constant assertion.
+unsafe impl bytemuck::ZeroableInOption for SharedOctree { }
+
+const _: () = {
+    if mem::size_of::<ThinArc<(), Octnode>>() != mem::size_of::<*const ()>() {
+        panic!("thin arc not ptr sized")
+    }
+
+    if mem::size_of::<Option<ThinArc<(), Octnode>>>() != mem::size_of::<ThinArc<(), Octnode>>() {
+        panic!("thin arc has no niche")
+    }
+
+    // SAFETY: `ThinArc` is currently implemented as a `repr(transparent)` wrapper around
+    // `ptr::NonNull`, meaning all of the bytes of `Option<ThinArc>::None` are initialized. We
+    // depend on an exact version of `triomphe` to prevent this from changing.
+    let niche = unsafe { mem::transmute::<Option<ThinArc<(), Octnode>>, *const ()>(None) };
+    if !niche.is_null() {
+        panic!("thin arc niche is not at zero")
+    }
+};
+
+const _: () = {
+    if mem::size_of::<SharedOctree>() < 5 {
+        panic!("shared octree too small")
+    }
+
+    if mem::size_of::<Option<SharedOctree>>() != mem::size_of::<SharedOctree>() {
+        panic!("shared octree has no niche")
+    }
+
+    let none = Option::<SharedOctree>::None;
+
+    // SAFETY: `Option<SharedOctree>` is the same size as `SharedOctree`, so we know the `Option`'s
+    // discriminant is stored in a niche of `SharedOctree` somehow. The only niche `SharedOctree`
+    // has is its `ptr` field, and `SharedOctree` contains no padding bytes, so the compiler could
+    // reasonably only store `Option`'s discriminant in `ptr`. We use this to assume that `ptr` is
+    // initialized. If the compiler somehow chose another way to store `Option<SharedOctree>`'s
+    // discriminant without failing our previous assertions, this would be undefined behavior.
+    let niche = unsafe {
+        *(&raw const none).byte_add(mem::offset_of!(SharedOctree, ptr)).cast::<*const ()>()
+    };
+
+    if !niche.is_null() {
+        panic!("shared octree niche is not at zero")
+    }
+    mem::forget(none);
+};
+
+const fn const_deref_thin_arc(arc: &ThinArc<(), Octnode>) -> &[Octnode] {
+    // SAFETY: The value from `arc` is unsafely copied and immediately turned back into a pointer.
+    // The current version of `triomphe::Arc::from_thin` does not panic under these circumstances,
+    // so `arc` will not be dropped twice. We depend on an exact version of `triomphe` to prevent
+    // this from changing.
+    let data = unsafe { &*triomphe::Arc::into_raw(triomphe::Arc::from_thin(ptr::read(arc))) };
+    &data.slice
+}
+
+impl crate::ffi::SharedOctreeExt for SharedOctree {
+    fn into_ptr(self) -> *const Octree {
+        if !self.is_inline() {
+            // SAFETY: `ThinArc` is currently implemented as a `repr(transparent)` wrapper around
+            // `ptr::NonNull`. We depend on an exact version of `triomphe` to prevent this from
+            // changing.
+            let arc = unsafe { mem::transmute::<ptr::NonNull<()>, ThinArc<(), Octnode>>(self.ptr) };
+            let ptr = triomphe::Arc::into_raw(triomphe::Arc::from_thin(arc)) as *const Octree;
+            return ptr
+        }
+
+        // SAFETY: `SharedOctree` is always at least 5 bytes in size, which is 1 byte larger than
+        // `Octnode`. All bytes of `SharedOctree` aside from trailing padding are always
+        // initialized. `Octnode` is `bytemuck::Pod`.
+        let [root] = unsafe { *(&raw const self).cast::<[Octnode; 1]>().byte_add(1) };
+
+        static ROOT_NODES: [[Octnode; 1]; 1 << 16] = seq_macro::seq!(N in 0x0000..=0xFFFF {
+            [#({
+                let [mat, dist] = (N as u16).to_le_bytes();
+                [Octnode { mat, dist, child: 0 }]
+            },)*]
+        });
+
+        let idx = u16::from_le_bytes([root.mat, root.dist]) as usize;
+        let root: &'static Octree = Octree::new(&ROOT_NODES[idx]);
+        root as *const Octree
+    }
+
+    unsafe fn from_ptr(ptr: *const Octree) -> Self {
+        // SAFETY: `ptr` was returned from a previous call to `into_ptr` per safety contract, so
+        // it's valid for reads right now.
+        let octree = unsafe { &*ptr };
+        if let [root] = octree.nodes() {
+            SharedOctree::from_root(*root)
+        } else {
+            // SAFETY: `ptr` was produced by `triomphe::Arc::into_raw`.
+            let arc = unsafe {
+                triomphe::Arc::into_thin(triomphe::Arc::from_raw(ptr as *const _))
+            };
+
+            SharedOctree::new_heap(arc)
+        }
+    }
+}
+
 /// A node in a terrain octree in the game's data format.
 ///
-/// The fields may be invalid.
+/// The fields may be invalid. It is legal for any of the functions in this crate to interpret
+/// invalid values however best fits the circumstances, including by aliasing them to valid values
+/// and even in situations where you may not expect it, except in circumstances that specifically
+/// document otherwise.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C, packed)]
 pub struct Octnode {
@@ -318,4 +697,89 @@ pub struct Octnode {
 impl Octnode {
     /// An empty, zeroed leaf node.
     pub const EMPTY: Self = Octnode { mat: 0, dist: 0, child: 0 };
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn parse_octree() {
+        let bytes = &[
+            0x09, 0x00,
+            0x04, 0x00, 0x01, 0x00,
+            0x04, 0x00, 0x02, 0x00,
+            0x03, 0x00, 0x03, 0x00,
+            0x04, 0x00, 0x04, 0x00,
+            0x03, 0x00, 0x05, 0x00,
+            0x04, 0x00, 0x06, 0x00,
+            0x02, 0x00, 0x07, 0x00,
+            0x04, 0x00, 0x08, 0x00,
+            0x02, 0x00, 0x09, 0x00,
+
+            0x00, 0x00,
+
+            0xFF, 0xFF,
+            0x00, 0x00, 0xFF, 0xFF,
+
+            0xCC,
+        ];
+
+        let (octree, bytes) = Octree::parse(bytes);
+        let octree = octree.expect("should be an octree");
+
+        assert_eq!(octree.len().get(), 9);
+        assert_eq!(octree.root(), &Octnode { mat: 4, dist: 0, child: 1 });
+        assert_eq!(octree.node_children(octree.root()), Some(&[
+            Octnode { mat: 4, dist: 0, child: 2 },
+            Octnode { mat: 3, dist: 0, child: 3 },
+            Octnode { mat: 4, dist: 0, child: 4 },
+            Octnode { mat: 3, dist: 0, child: 5 },
+            Octnode { mat: 4, dist: 0, child: 6 },
+            Octnode { mat: 2, dist: 0, child: 7 },
+            Octnode { mat: 4, dist: 0, child: 8 },
+            Octnode { mat: 2, dist: 0, child: 9 },
+        ]));
+
+        let (octree, bytes) = Octree::parse(bytes);
+        let octree = octree.expect("should be an octree");
+
+        assert_eq!(octree.len().get(), 1);
+        assert_eq!(octree.root(), &Octnode::EMPTY);
+
+        let (octree, bytes) = Octree::parse(bytes);
+        let octree = octree.expect("should be an octree");
+
+        assert_eq!(octree.len().get(), 1);
+        assert_eq!(octree.root(), &Octnode { mat: 0, dist: 0, child: u16::MAX });
+
+        assert_eq!(bytes, &[0xCC]);
+        let (octree, bytes) = Octree::parse(bytes);
+        assert!(octree.is_none());
+        assert_eq!(bytes, &[]);
+    }
+
+    #[test]
+    fn shared_octree() {
+        let octree = SharedOctree::from_root(Octnode { mat: 252, dist: 252, child: 0 });
+        assert_eq!(octree.root(), &Octnode { mat: 252, dist: 252, child: 0 });
+
+        let nodes = &[
+            Octnode { mat: 1, dist: 126, child: 1 },
+            Octnode { mat: 1, dist: 126, child: 1000 },
+            Octnode { mat: 2, dist: 126, child: 1000 },
+            Octnode { mat: 3, dist: 126, child: 1000 },
+            Octnode { mat: 4, dist: 126, child: 1000 },
+            Octnode { mat: 5, dist: 126, child: 1000 },
+            Octnode { mat: 6, dist: 126, child: 1000 },
+            Octnode { mat: 7, dist: 126, child: 1000 },
+            Octnode { mat: 8, dist: 126, child: 1000 },
+        ];
+
+        let octree = SharedOctree::new(Octree::new(nodes));
+        let octree2 = octree.clone();
+
+        assert_eq!(octree.nodes(), octree2.nodes());
+        assert_eq!(octree.nodes(), nodes);
+    }
 }

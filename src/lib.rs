@@ -22,7 +22,7 @@ mod voxels;
 pub mod ffi;
 
 pub use game::{GameDir, Game};
-pub use octree::{Octree, Octnode};
+pub use octree::{Octree, SharedOctree, Octnode};
 pub use valid::{MaterialIndex, SignedDistance};
 pub use voxels::{VoxelGrid, Voxel, ValidVoxelGrid, ValidVoxel};
 

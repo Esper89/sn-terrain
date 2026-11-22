@@ -232,7 +232,8 @@ const _: () = {
         panic!("option material niche optimization not active")
     }
 
-    // SAFETY: `Option<MaterialIndex>` is one byte in size and that byte is always initialized.
+    // SAFETY: `Option<MaterialIndex>` is one byte in size, and an `Option` of an inhabited type
+    // must at minimum store one bit of information, so that single byte must be initialized.
     let niche = unsafe { mem::transmute::<Option<MaterialIndex>, u8>(None) };
     if niche != 0 { panic!("option material niche optimization picked wrong niche") }
 };
@@ -483,7 +484,8 @@ const _: () = {
         panic!("option distance niche optimization not active")
     }
 
-    // SAFETY: `Option<SignedDistance>` is one byte in size and that byte is always initialized.
+    // SAFETY: `Option<SignedDistance>` is one byte in size, and an `Option` of an inhabited type
+    // must at minimum store one bit of information, so that single byte must be initialized.
     let niche = unsafe { mem::transmute::<Option<SignedDistance>, u8>(None) };
     if niche != 0 { panic!("option distance niche optimization picked wrong niche") }
 };
