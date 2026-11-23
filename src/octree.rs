@@ -726,7 +726,7 @@ pub struct Octnode {
     /// Index of this node's first child in the containing octree, or zero for a leaf node.
     ///
     /// Indices where any of the children would be outside the bounds of the containing octree, and
-    /// indices that contain one of this node's parents, are invalid.
+    /// indices that contain one of this node's ancestors, are invalid.
     ///
     /// If the signed distance of this node is zero, the node should not have children.
     pub child: u16,

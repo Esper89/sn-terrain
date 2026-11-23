@@ -27,6 +27,7 @@ mod game;
 mod octree;
 mod valid;
 mod voxels;
+mod rasterize;
 mod world;
 
 #[cfg(feature = "ffi")] pub mod ffi;
@@ -36,6 +37,7 @@ pub use game::{GameDir, Game};
 pub use octree::{Octree, SharedOctree, Octnode};
 pub use valid::{MaterialIndex, SignedDistance};
 pub use voxels::{VoxelGrid, Voxel, ValidVoxelGrid, ValidVoxel};
+pub use rasterize::rasterize;
 pub use world::{World, BatchOctrees, BatchPos, OctreeOffset, OctreePos};
 
 pub mod error {
