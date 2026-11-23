@@ -96,6 +96,11 @@ impl quick_cache::Weighter<BatchPos, CachedBatch> for BatchWeighter {
     fn weight(&self, _: &BatchPos, v: &CachedBatch) -> u64 { v.bytes as u64 }
 }
 
+const _: () = {
+    const fn assert_send_sync<T: Send + Sync>() { }
+    assert_send_sync::<WorldCache>()
+};
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -110,9 +115,11 @@ mod test {
 
         let cases = [
             ([0, 0, 0], solid),
+            ([0, 0, 0], solid),
             ([-100, 100, -100], empty),
             ([1, 1, 1], solid),
             ([4, 0, 0], solid),
+            ([5, 0, 0], empty),
             ([5, 0, 0], empty),
             ([0, 0, 5], solid),
             ([0, 0, 6], empty),

@@ -576,12 +576,24 @@ impl Default for SharedOctree {
     fn default() -> Self { SharedOctree::EMPTY }
 }
 
+// SAFETY: `SharedOctree` contains only inline data or a pointer to a `ThinArc<(), Octnode>`, which
+// is `Send`.
+unsafe impl Send for SharedOctree { }
+
+// SAFETY: `SharedOctree` contains only inline data or a pointer to a `ThinArc<(), Octnode>`, which
+// is `Sync`.
+unsafe impl Sync for SharedOctree { }
+
 // SAFETY: `Option<SharedOctree>::None` is `0` per constant assertion.
 unsafe impl bytemuck::ZeroableInOption for SharedOctree { }
 
 const _: () = {
-    if mem::size_of::<ThinArc<(), Octnode>>() != mem::size_of::<*const ()>() {
+    if mem::size_of::<ThinArc<(), Octnode>>() != mem::size_of::<ptr::NonNull<()>>() {
         panic!("thin arc not ptr sized")
+    }
+
+    if mem::align_of::<ThinArc<(), Octnode>>() != mem::align_of::<ptr::NonNull<()>>() {
+        panic!("thin arc not ptr aligned")
     }
 
     if mem::size_of::<Option<ThinArc<(), Octnode>>>() != mem::size_of::<ThinArc<(), Octnode>>() {
