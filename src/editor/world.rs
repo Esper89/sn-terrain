@@ -1,5 +1,5 @@
 use std::{hash, mem, sync::Arc};
-use crate::{GameDir, SharedOctree, World, BatchOctrees, BatchPosition, OctreePosition};
+use crate::{GameDir, SharedOctree, World, BatchOctrees, BatchPos, OctreePos};
 
 /// A terrain directory of batch files that caches octree loading.
 #[derive(Debug)]
@@ -28,7 +28,7 @@ impl WorldCache {
     /// Get an octree by its position, loading it from the game directory if it isn't cached.
     ///
     /// May block the thread to read from the filesystem.
-    pub fn get_octree_blocking(&self, octree: OctreePosition) -> SharedOctree {
+    pub fn get_octree_blocking(&self, octree: OctreePos) -> SharedOctree {
         let (batch, octree) = octree.into_batch_offset();
         let batch = self.cache
             .get_or_insert_with(&batch, || Ok(new_cached_batch(&self.world, batch)))
@@ -51,13 +51,13 @@ impl Clone for WorldCache {
     }
 }
 
-fn new_cached_batch(world: &World, batch: BatchPosition) -> CachedBatch {
+fn new_cached_batch(world: &World, batch: BatchPos) -> CachedBatch {
     let octrees = world.load_batch_blocking(batch);
     let octrees = if octrees.octrees().all(|o| o.is_empty()) { None } else {
         Some(Arc::new(octrees))
     };
 
-    let mut bytes = const { mem::size_of::<BatchPosition>() + mem::size_of::<CachedBatch>() };
+    let mut bytes = const { mem::size_of::<BatchPos>() + mem::size_of::<CachedBatch>() };
     if let Some(octrees) = &octrees {
         bytes += const { mem::size_of::<usize>() * 2 + mem::size_of::<BatchOctrees>() };
         for octree in octrees.octrees() {
@@ -69,7 +69,7 @@ fn new_cached_batch(world: &World, batch: BatchPosition) -> CachedBatch {
 }
 
 type BatchCache = quick_cache::sync::Cache<
-    BatchPosition, CachedBatch,
+    BatchPos, CachedBatch,
     BatchWeighter, hash::BuildHasherDefault<ahash::AHasher>,
 >;
 
@@ -92,8 +92,8 @@ fn new_batch_cache() -> BatchCache {
 #[derive(Debug, Copy, Clone)]
 struct BatchWeighter;
 
-impl quick_cache::Weighter<BatchPosition, CachedBatch> for BatchWeighter {
-    fn weight(&self, _: &BatchPosition, v: &CachedBatch) -> u64 { v.bytes as u64 }
+impl quick_cache::Weighter<BatchPos, CachedBatch> for BatchWeighter {
+    fn weight(&self, _: &BatchPos, v: &CachedBatch) -> u64 { v.bytes as u64 }
 }
 
 #[cfg(test)]
@@ -121,7 +121,7 @@ mod test {
         ];
 
         for ([x, y, z], expect) in cases {
-            let octree = world.get_octree_blocking(OctreePosition::new(x, y, z));
+            let octree = world.get_octree_blocking(OctreePos::new(x, y, z));
             assert_eq!(octree.nodes(), expect, "octree [{x}, {y}, {z}]");
         }
     }

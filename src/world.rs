@@ -16,7 +16,7 @@ impl World {
     /// Load a batch from the game directory by its position.
     ///
     /// Blocks the thread to read from the filesystem.
-    pub fn load_batch_blocking(&self, batch: BatchPosition) -> BatchOctrees {
+    pub fn load_batch_blocking(&self, batch: BatchPos) -> BatchOctrees {
         let mut octrees = [SharedOctree::EMPTY; 125];
         self.load_octrees_blocking(batch, |at, octree| {
             octrees[at.idx()] = SharedOctree::new(octree);
@@ -29,10 +29,10 @@ impl World {
     /// Blocks the thread to read from the filesystem.
     pub fn load_octrees_blocking(
         &self,
-        batch: BatchPosition,
+        batch: BatchPos,
         mut octrees: impl FnMut(OctreeOffset, &Octree),
     ) {
-        let BatchPosition { x, y, z } = batch;
+        let BatchPos { x, y, z } = batch;
         let rearrange_north_edge = z == 25;
         let path = self.game.terrain_dir().join(format!("compiled-batch-{x}-{y}-{z}.optoctrees"));
         let bytes = read_batch(&path).unwrap_or(vec![]);
@@ -111,7 +111,7 @@ impl BatchOctrees {
     bytemuck::Pod, bytemuck::Zeroable,
 )]
 #[repr(C)]
-pub struct BatchPosition {
+pub struct BatchPos {
     /// The X coordinate of a batch in the world.
     pub x: i32,
 
@@ -122,14 +122,14 @@ pub struct BatchPosition {
     pub z: i32,
 }
 
-impl BatchPosition {
+impl BatchPos {
     /// The batch at the terrain origin.
     ///
     /// In-game, this is at (−2048.0, −3040.0, −2048.0) in Unity engine coordinates.
-    pub const ORIGIN: Self = BatchPosition::new(0, 0, 0);
+    pub const ORIGIN: Self = BatchPos::new(0, 0, 0);
 
     /// Create a batch position from its coordinates.
-    pub const fn new(x: i32, y: i32, z: i32) -> Self { BatchPosition { x, y, z } }
+    pub const fn new(x: i32, y: i32, z: i32) -> Self { BatchPos { x, y, z } }
 }
 
 /// The X, Y, and Z position of an octree in the world.
@@ -141,7 +141,7 @@ impl BatchPosition {
     bytemuck::Pod, bytemuck::Zeroable,
 )]
 #[repr(C)]
-pub struct OctreePosition {
+pub struct OctreePos {
     /// The X coordinate of an octree in the world.
     pub x: i32,
 
@@ -152,23 +152,23 @@ pub struct OctreePosition {
     pub z: i32,
 }
 
-impl OctreePosition {
+impl OctreePos {
     /// The octree at the terrain origin.
     ///
     /// In-game, this is at (−2048.0, −3040.0, −2048.0) in Unity engine coordinates.
-    pub const ORIGIN: Self = OctreePosition::new(0, 0, 0);
+    pub const ORIGIN: Self = OctreePos::new(0, 0, 0);
 
     /// Create an octree position from its coordinates.
-    pub const fn new(x: i32, y: i32, z: i32) -> Self { OctreePosition { x, y, z } }
+    pub const fn new(x: i32, y: i32, z: i32) -> Self { OctreePos { x, y, z } }
 
     /// Convert this octree position into a batch position and an octree offset.
-    pub const fn into_batch_offset(self) -> (BatchPosition, OctreeOffset) {
-        let OctreePosition { x, y, z } = self;
+    pub const fn into_batch_offset(self) -> (BatchPos, OctreeOffset) {
+        let OctreePos { x, y, z } = self;
         let [bx, by, bz] = [x.div_euclid(5), y.div_euclid(5), z.div_euclid(5)];
         let [ox, oy, oz] = [x.rem_euclid(5), y.rem_euclid(5), z.rem_euclid(5)];
         let [ox, oy, oz] = [ox as usize, oy as usize, oz as usize];
 
-        let batch = BatchPosition::new(bx, by, bz);
+        let batch = BatchPos::new(bx, by, bz);
 
         // SAFETY: `ox`, `oy`, and `oz` are all within range 0–4, and `4 * 25 + 4 * 5 + 4` is 124,
         // which is within range 0–124.
@@ -313,18 +313,18 @@ mod test {
         let solid = Octree::new_array(&[Octnode { mat: 1, dist: 0, child: 0 }]).nodes();
         let empty = Octree::EMPTY.nodes();
 
-        let batch = world.load_batch_blocking(BatchPosition::new(0, 0, 0));
+        let batch = world.load_batch_blocking(BatchPos::new(0, 0, 0));
         for idx in OctreeOffset::all() {
             assert_eq!(batch.get(*idx).nodes(), solid);
         }
 
-        let batch = world.load_batch_blocking(BatchPosition::new(0, 0, 1));
+        let batch = world.load_batch_blocking(BatchPos::new(0, 0, 1));
         assert_eq!(batch.get(OctreeOffset::MIN).nodes(), solid);
         for idx in OctreeOffset::all().iter().skip(1) {
             assert_eq!(batch.get(*idx).nodes(), empty);
         }
 
-        let batch = world.load_batch_blocking(BatchPosition::new(0, 0, 25));
+        let batch = world.load_batch_blocking(BatchPos::new(0, 0, 25));
         for idx in OctreeOffset::all() {
             let expect = if idx.idx() % 5 > 2 { empty } else { solid };
             assert_eq!(batch.get(*idx).nodes(), expect);

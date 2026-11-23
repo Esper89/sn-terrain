@@ -36,7 +36,7 @@ pub use game::{GameDir, Game};
 pub use octree::{Octree, SharedOctree, Octnode};
 pub use valid::{MaterialIndex, SignedDistance};
 pub use voxels::{VoxelGrid, Voxel, ValidVoxelGrid, ValidVoxel};
-pub use world::{World, BatchOctrees, BatchPosition, OctreeOffset, OctreePosition};
+pub use world::{World, BatchOctrees, BatchPos, OctreeOffset, OctreePos};
 
 pub mod error {
     //! Error types produced in this crate.
