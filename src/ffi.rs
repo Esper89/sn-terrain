@@ -28,7 +28,7 @@ pub trait SharedOctreeExt: Sized + seal_shared_octree_ext::Sealed {
     /// The pointer must not be written to, but will remain valid for reads until it's passed to
     /// [`from_ptr`](SharedOctreeExt::from_ptr).
     ///
-    /// Inline octrees may have their invalid fields modified.
+    /// Invalid fields of inline octrees may not be preserved.
     fn into_ptr(self) -> *const Octree;
 
     /// Create a shared octree from a pointer produced by [`into_ptr`](SharedOctreeExt::into_ptr).
