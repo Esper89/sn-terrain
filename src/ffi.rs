@@ -6,7 +6,7 @@
 //! This module requires the `ffi` crate feature.
 
 use std::{alloc, env, ffi, num, ptr};
-use crate::{error::InvalidGameDir, GameDir, Octree, SharedOctree};
+use crate::{error::InvalidGameDir, GameDir, SharedOctree};
 
 /// Get the game directory of the currently running process.
 ///
@@ -29,7 +29,7 @@ pub trait SharedOctreeExt: Sized + seal_shared_octree_ext::Sealed {
     /// [`from_ptr`](SharedOctreeExt::from_ptr).
     ///
     /// Invalid fields of inline octrees may not be preserved.
-    fn into_ptr(self) -> *const Octree;
+    fn into_ptr(self) -> SharedOctreePtr;
 
     /// Create a shared octree from a pointer produced by [`into_ptr`](SharedOctreeExt::into_ptr).
     ///
@@ -39,9 +39,24 @@ pub trait SharedOctreeExt: Sized + seal_shared_octree_ext::Sealed {
     /// # Safety
     ///
     /// `ptr` must have been returned from a previous call to
-    /// [`into_ptr`](SharedOctreeExt::into_ptr) and must still be valid. The same pointer may not
-    /// be passed to this function multiple times.
-    unsafe fn from_ptr(ptr: *const Octree) -> Self;
+    /// [`into_ptr`](SharedOctreeExt::into_ptr) and its fields must not have been modified. The same
+    /// pointer may not be passed to this function multiple times.
+    unsafe fn from_ptr(ptr: SharedOctreePtr) -> Self;
+}
+
+/// A stable raw pointer to a shared octree.
+///
+/// Use [`SharedOctreeExt`] to convert to and from the standard Rust type.
+///
+/// This type can be passed over FFI. To avoid a memory leak, it must be passed back to Rust and
+/// converted back to a [`SharedOctree`] to drop it. The data pointed to must not be modified.
+#[repr(C)]
+pub struct SharedOctreePtr {
+    /// A pointer to the first byte of the octree.
+    pub ptr: *const u8,
+
+    /// The length of the octree in bytes.
+    pub len: i32,
 }
 
 mod seal_shared_octree_ext {

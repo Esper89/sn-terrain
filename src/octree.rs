@@ -635,14 +635,21 @@ const fn const_deref_thin_arc(arc: &ThinArc<(), Octnode>) -> &[Octnode] {
 
 #[cfg(feature = "ffi")]
 impl crate::ffi::SharedOctreeExt for SharedOctree {
-    fn into_ptr(self) -> *const Octree {
+    fn into_ptr(self) -> crate::ffi::SharedOctreePtr {
         if !self.is_inline() {
             // SAFETY: `ThinArc` is currently implemented as a `repr(transparent)` wrapper around
             // `ptr::NonNull`. We depend on an exact version of `triomphe` to prevent this from
             // changing.
             let arc = unsafe { mem::transmute::<ptr::NonNull<()>, ThinArc<(), Octnode>>(self.ptr) };
-            let ptr = triomphe::Arc::into_raw(triomphe::Arc::from_thin(arc)) as *const Octree;
-            return ptr
+            let ptr = triomphe::Arc::into_raw(triomphe::Arc::from_thin(arc));
+
+            // SAFETY: The pointer returned by `into_raw` includes the length header, so we skip
+            // past that to get the pointer to the actual octree.
+            let ptr = unsafe { ptr.byte_add(mem::size_of::<usize>()) as *const [Octnode] };
+            let len = (ptr.len() * 4) as i32;
+            let ptr = ptr.cast::<u8>();
+
+            return crate::ffi::SharedOctreePtr { ptr, len }
         }
 
         // SAFETY: `SharedOctree` is always at least 5 bytes in size, which is 1 byte larger than
@@ -659,20 +666,31 @@ impl crate::ffi::SharedOctreeExt for SharedOctree {
 
         let idx = u16::from_le_bytes([root.mat, root.dist]) as usize;
         let root: &'static Octree = Octree::new(&ROOT_NODES[idx]);
-        root as *const Octree
+
+        let ptr = (root as *const Octree).cast::<u8>();
+        let len = 4;
+        crate::ffi::SharedOctreePtr { ptr, len }
     }
 
-    unsafe fn from_ptr(ptr: *const Octree) -> Self {
+    unsafe fn from_ptr(ptr: crate::ffi::SharedOctreePtr) -> Self {
+        let ptr = ptr::slice_from_raw_parts(ptr.ptr.cast::<Octnode>(), ptr.len as usize / 4);
+        let ptr = ptr as *const Octree;
+
         // SAFETY: `ptr` was returned from a previous call to `into_ptr` per safety contract, so
-        // it's valid for reads right now.
+        // it's valid for reads right now and points to a valid octree.
         let octree = unsafe { &*ptr };
         if let [root] = octree.nodes() {
             SharedOctree::from_root(*root)
         } else {
+            type ArcTarget = triomphe::HeaderSlice<triomphe::HeaderWithLength<()>, [Octnode]>;
+            let ptr = ptr as *const ArcTarget;
+
+            // SAFETY: The pointer needed by `from_raw` requires the length header, so we move the
+            // pointer back to get it.
+            let ptr = unsafe { ptr.byte_sub(mem::size_of::<usize>()) };
+
             // SAFETY: `ptr` was produced by `triomphe::Arc::into_raw`.
-            let arc = unsafe {
-                triomphe::Arc::into_thin(triomphe::Arc::from_raw(ptr as *const _))
-            };
+            let arc = unsafe { triomphe::Arc::into_thin(triomphe::Arc::from_raw(ptr)) };
 
             SharedOctree::new_heap(arc)
         }
