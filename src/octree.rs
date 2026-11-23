@@ -328,6 +328,11 @@ impl Octree {
         unsafe { NonZero::new_unchecked(self.nodes.len() as u16) }
     }
 
+    /// If this octree contains only a single empty root node.
+    pub const fn is_empty(&self) -> bool {
+        self.len().get() == 1 && self.root().mat == 0 && self.root().dist == 0
+    }
+
     /// The root node (first node) of this octree.
     pub const fn root(&self) -> &Octnode {
         // SAFETY: `self.nodes` is guaranteed to be non-empty per invariants.
@@ -462,6 +467,16 @@ impl SharedOctree {
                 => lhs.heap_ptr().addr() == rhs.heap_ptr().addr(),
 
             _ => false,
+        }
+    }
+
+    #[cfg(feature = "editor")]
+    pub(crate) fn heap_space(&self) -> usize {
+        let len = self.len().get() as usize;
+        if len > 1 {
+            len * mem::size_of::<Octnode>() + const { mem::size_of::<usize>() * 2 }
+        } else {
+            0
         }
     }
 

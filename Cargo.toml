@@ -14,9 +14,12 @@ all-features = true
 
 [features]
 ffi = []
+editor = ["dep:ahash", "dep:quick_cache"]
 
 [dependencies]
+ahash = { version = "0.8", optional = true }
 bytemuck = { version = "1.25", features = ["derive", "extern_crate_std", "latest_stable_rust"] }
+quick_cache = { version = "0.7", optional = true }
 seq-macro = "0.3"
 thiserror = "2.0"
 triomphe = "=0.1.17"

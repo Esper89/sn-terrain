@@ -14,6 +14,8 @@
 //!
 #![cfg_attr(feature = "ffi", doc = "- `ffi` enables the [`ffi`] module.")]
 #![cfg_attr(not(feature = "ffi"), doc = "- `ffi` enables the `ffi` module.")]
+#![cfg_attr(feature = "editor", doc = "- `editor` enables the [`editor`] module.")]
+#![cfg_attr(not(feature = "editor"), doc = "- `editor` enables the `editor` module.")]
 //!
 //! [data-fmt]: https://esper89.github.io/Subnautica-TerrainPatcher/docs/terrain-data-format.html
 //! [patch-fmt]: https://esper89.github.io/Subnautica-TerrainPatcher/docs/terrain-patch-format.html
@@ -28,12 +30,13 @@ mod voxels;
 mod world;
 
 #[cfg(feature = "ffi")] pub mod ffi;
+#[cfg(feature = "editor")] pub mod editor;
 
 pub use game::{GameDir, Game};
 pub use octree::{Octree, SharedOctree, Octnode};
 pub use valid::{MaterialIndex, SignedDistance};
 pub use voxels::{VoxelGrid, Voxel, ValidVoxelGrid, ValidVoxel};
-pub use world::{World, BatchOctrees, OctreeOffset};
+pub use world::{World, BatchOctrees, BatchPosition, OctreeOffset, OctreePosition};
 
 pub mod error {
     //! Error types produced in this crate.
