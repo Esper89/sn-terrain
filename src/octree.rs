@@ -661,6 +661,7 @@ impl crate::ffi::SharedOctreeExt for SharedOctree {
             let len = (ptr.len() * 4) as i32;
             let ptr = ptr.cast::<u8>();
 
+            mem::forget(self);
             return crate::ffi::SharedOctreePtr { ptr, len }
         }
 
