@@ -869,6 +869,13 @@ mod test {
         let octree1 = octree1.into_ptr();
         assert_eq!(octree2.ref_count(), 2);
 
+        // SAFETY: `octree1` is a valid `SharedOctree` returned by `into_ptr` and its length is
+        // guaranteed to be at least one node.
+        assert_eq!(
+            unsafe { *octree1.ptr.cast::<Octnode>() },
+            Octnode { mat: 1, dist: 126, child: 1 },
+        );
+
         // SAFETY: `octree1` came directory from `into_ptr`.
         let octree1 = unsafe { SharedOctree::from_ptr(octree1) };
         assert!(octree1.ref_eq(&octree2));
