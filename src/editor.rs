@@ -6,6 +6,6 @@
 //!
 //! [editor]: https://github.com/jbeast291/SubnauticaWorldEditor
 
-mod world;
+mod world_cache;
 
-pub use world::WorldCache;
+pub use world_cache::WorldCache;
