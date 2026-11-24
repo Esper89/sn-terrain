@@ -812,9 +812,6 @@ mod test {
 
     #[test]
     fn shared_octree() {
-        let octree = SharedOctree::from_root(Octnode { mat: 252, dist: 252, child: 0 });
-        assert_eq!(octree.root(), &Octnode { mat: 252, dist: 252, child: 0 });
-
         let nodes = &[
             Octnode { mat: 1, dist: 126, child: 1 },
             Octnode { mat: 1, dist: 126, child: 1000 },
@@ -827,11 +824,24 @@ mod test {
             Octnode { mat: 8, dist: 126, child: 1000 },
         ];
 
-        let octree = SharedOctree::new(Octree::new(nodes));
-        let octree2 = octree.clone();
+        let octree1 = SharedOctree::new(Octree::new(nodes));
+        assert_eq!(octree1.ref_count(), 1);
 
-        assert_eq!(octree.nodes(), octree2.nodes());
-        assert_eq!(octree.nodes(), nodes);
+        let octree2 = octree1.clone();
+        assert_eq!(octree2.ref_count(), 2);
+
+        assert_eq!(octree1.nodes(), octree2.nodes());
+        assert_eq!(octree1.nodes(), nodes);
+        assert!(octree1.ref_eq(&octree2));
+
+        drop(octree1);
+        assert_eq!(octree2.ref_count(), 1);
+
+        let inline = SharedOctree::new(Octree::new_array(&[
+            Octnode { mat: 255, dist: 255, child: 65_535 },
+        ]));
+        assert_eq!(inline.ref_count(), 0);
+        assert_eq!(inline.nodes(), [Octnode { mat: 255, dist: 255, child: 65_535 }]);
     }
 
     #[cfg(feature = "ffi")]
