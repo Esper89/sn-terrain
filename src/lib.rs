@@ -30,6 +30,8 @@ mod voxels;
 mod rasterize;
 mod world;
 
+pub mod utils;
+
 #[cfg(feature = "ffi")] pub mod ffi;
 #[cfg(feature = "editor")] pub mod editor;
 
@@ -37,7 +39,7 @@ pub use game::{GameDir, Game};
 pub use octree::{Octree, SharedOctree, Octnode};
 pub use valid::{MaterialIndex, SignedDistance};
 pub use voxels::{VoxelGrid, Voxel, ValidVoxelGrid, ValidVoxel};
-pub use rasterize::rasterize;
+pub use rasterize::{rasterize, rasterize_simd};
 pub use world::{World, BatchOctrees, BatchPos, OctreeOffset, OctreePos};
 
 pub mod error {
