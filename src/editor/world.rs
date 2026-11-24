@@ -112,6 +112,17 @@ mod test {
         let world = WorldCache::new(game);
         let solid = Octree::new_array(&[Octnode { mat: 1, dist: 0, child: 0 }]).nodes();
         let empty = Octree::EMPTY.nodes();
+        let complex = Octree::new_array(&[
+            Octnode { mat: 1, dist: 0, child: 1 },
+            Octnode { mat: 1, dist: 0, child: 0 },
+            Octnode { mat: 1, dist: 0, child: 0 },
+            Octnode { mat: 1, dist: 0, child: 0 },
+            Octnode { mat: 1, dist: 0, child: 0 },
+            Octnode { mat: 1, dist: 0, child: 0 },
+            Octnode { mat: 1, dist: 0, child: 0 },
+            Octnode { mat: 1, dist: 0, child: 0 },
+            Octnode { mat: 1, dist: 0, child: 0 }
+        ]).nodes();
 
         let cases = [
             ([0, 0, 0], solid),
@@ -121,7 +132,8 @@ mod test {
             ([4, 0, 0], solid),
             ([5, 0, 0], empty),
             ([5, 0, 0], empty),
-            ([0, 0, 5], solid),
+            ([0, 0, 5], complex),
+            ([0, 0, 5], complex),
             ([0, 0, 6], empty),
             ([0, 0, 127], solid),
             ([0, 0, 128], empty),

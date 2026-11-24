@@ -312,6 +312,17 @@ mod test {
         let world = World::new(GameDir::new("tests/cases/game/sn").expect("should load sn game"));
         let solid = Octree::new_array(&[Octnode { mat: 1, dist: 0, child: 0 }]).nodes();
         let empty = Octree::EMPTY.nodes();
+        let complex = Octree::new_array(&[
+            Octnode { mat: 1, dist: 0, child: 1 },
+            Octnode { mat: 1, dist: 0, child: 0 },
+            Octnode { mat: 1, dist: 0, child: 0 },
+            Octnode { mat: 1, dist: 0, child: 0 },
+            Octnode { mat: 1, dist: 0, child: 0 },
+            Octnode { mat: 1, dist: 0, child: 0 },
+            Octnode { mat: 1, dist: 0, child: 0 },
+            Octnode { mat: 1, dist: 0, child: 0 },
+            Octnode { mat: 1, dist: 0, child: 0 }
+        ]).nodes();
 
         let batch = world.load_batch_blocking(BatchPos::new(0, 0, 0));
         for idx in OctreeOffset::all() {
@@ -319,7 +330,7 @@ mod test {
         }
 
         let batch = world.load_batch_blocking(BatchPos::new(0, 0, 1));
-        assert_eq!(batch.get(OctreeOffset::MIN).nodes(), solid);
+        assert_eq!(batch.get(OctreeOffset::MIN).nodes(), complex);
         for idx in OctreeOffset::all().iter().skip(1) {
             assert_eq!(batch.get(*idx).nodes(), empty);
         }

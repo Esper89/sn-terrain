@@ -833,4 +833,48 @@ mod test {
         assert_eq!(octree.nodes(), octree2.nodes());
         assert_eq!(octree.nodes(), nodes);
     }
+
+    #[cfg(feature = "ffi")]
+    #[test]
+    fn shared_octree_ptr() {
+        use crate::ffi::SharedOctreeExt;
+        let nodes = &[
+            Octnode { mat: 1, dist: 126, child: 1 },
+            Octnode { mat: 1, dist: 126, child: 1000 },
+            Octnode { mat: 2, dist: 126, child: 1000 },
+            Octnode { mat: 3, dist: 126, child: 1000 },
+            Octnode { mat: 4, dist: 126, child: 1000 },
+            Octnode { mat: 5, dist: 126, child: 1000 },
+            Octnode { mat: 6, dist: 126, child: 1000 },
+            Octnode { mat: 7, dist: 126, child: 1000 },
+            Octnode { mat: 8, dist: 126, child: 1000 },
+        ];
+
+        let octree1 = SharedOctree::new(Octree::new(nodes));
+        assert_eq!(octree1.ref_count(), 1);
+
+        let octree2 = octree1.clone();
+        assert_eq!(octree2.ref_count(), 2);
+
+        let octree1 = octree1.into_ptr();
+        assert_eq!(octree2.ref_count(), 2);
+
+        // SAFETY: `octree1` came directory from `into_ptr`.
+        let octree1 = unsafe { SharedOctree::from_ptr(octree1) };
+        assert!(octree1.ref_eq(&octree2));
+        assert_eq!(octree1.nodes(), nodes);
+
+        assert_eq!(octree2.ref_count(), 2);
+        drop(octree1);
+        assert_eq!(octree2.ref_count(), 1);
+
+        let inline = SharedOctree::new(Octree::new_array(&[
+            Octnode { mat: 255, dist: 255, child: 65_535 },
+        ]));
+        assert_eq!(inline.ref_count(), 0);
+
+        // SAFETY: The result of `into_ptr` is directly passed back to `from_ptr`.
+        let inline = unsafe { SharedOctree::from_ptr(inline.into_ptr()) };
+        assert_eq!(inline.nodes(), [Octnode { mat: 255, dist: 255, child: 0 }]);
+    }
 }
