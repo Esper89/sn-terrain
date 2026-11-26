@@ -39,7 +39,7 @@ pub use game::{GameDir, Game};
 pub use octree::{Octree, SharedOctree, Octnode};
 pub use valid::{MaterialIndex, SignedDistance};
 pub use voxels::{VoxelGrid, Voxel, ValidVoxelGrid, ValidVoxel};
-pub use rasterize::{rasterize, rasterize_simd};
+pub use rasterize::rasterize;
 pub use world::{World, BatchOctrees, BatchPos, OctreeOffset, OctreePos};
 
 pub mod error {

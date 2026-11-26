@@ -2,5 +2,9 @@
 //!
 //! This module is for code used by this crate that isn't specific to Subnautica terrain modding.
 
-pub use fearless_simd;
-pub use fearless_simd_macros;
+mod cpu;
+
+pub use cpu::{Cpu, CpuLevel, CpuDispatch, dispatch_cpu, dispatch_cpu_all};
+
+#[cfg(test)]
+pub(crate) use cpu::test_all_cpu_levels;

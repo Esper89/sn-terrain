@@ -322,6 +322,17 @@ impl Octree {
         unsafe { Box::from_raw_in(bytes, alloc) }
     }
 
+    /// Convert an octree to a voxel grid.
+    ///
+    /// _See the [`rasterize`](crate::rasterize) function for details._
+    ///
+    /// This method is an easy-to-use wrapper. If you have performance concerns, use the
+    /// [`rasterize`](crate::rasterize) function.
+    #[inline]
+    pub fn rasterize(&self) -> crate::VoxelGrid {
+        crate::rasterize::rasterize_method_impl(self)
+    }
+
     /// The length of this octree in nodes.
     pub const fn len(&self) -> NonZero<u16> {
         // SAFETY: The length of `self.nodes` fits in a `NonZero<u16>` per invariants.

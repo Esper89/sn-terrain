@@ -1,6 +1,24 @@
-use fearless_simd::{Simd, Level, dispatch};
+use fearless_simd::Simd;
 use fearless_simd_macros::simd;
-use crate::{Octree, Octnode, VoxelGrid, Voxel};
+use crate::{utils::{Cpu, CpuLevel, CpuDispatch, dispatch_cpu}, Octree, Octnode, VoxelGrid, Voxel};
+
+#[inline(always)]
+pub(crate) fn rasterize_method_impl(octree: &Octree) -> VoxelGrid {
+    struct Rasterize<'r>(&'r Octree, &'r mut VoxelGrid);
+    impl CpuDispatch for Rasterize<'_> {
+        type Output = ();
+
+        #[inline(always)]
+        fn dispatch<C: Cpu>(self, cpu: C) {
+            let Rasterize(octree, grid) = self;
+            rasterize(cpu, octree, grid);
+        }
+    }
+
+    let mut grid = VoxelGrid::EMPTY;
+    dispatch_cpu(const { CpuLevel::baseline() }, Rasterize(octree, &mut grid));
+    grid
+}
 
 /// Draw an octree to a voxel grid.
 ///
@@ -9,18 +27,10 @@ use crate::{Octree, Octnode, VoxelGrid, Voxel};
 /// five levels, and nodes that have one of their ancestors as their child will still be descended
 /// as though the tree structure were valid.
 ///
-/// This function uses the architecture's baseline instruction set. For higher performance on newer
-/// processors, you may want to call [`rasterize_simd`] with an explicit SIMD level.
-pub fn rasterize(octree: &Octree, grid: &mut VoxelGrid) {
-    dispatch!(const { Level::baseline() }, simd => rasterize_simd(simd, octree, grid));
-}
-
-/// Draw an octree to a voxel grid with an explicit SIMD level.
-///
-/// _See [`rasterize`] for documentation._
-#[simd]
-pub fn rasterize_simd(simd: impl Simd, octree: &Octree, grid: &mut VoxelGrid) {
-    grid.0.rasterize_node(simd, octree, octree.root());
+/// This function is for advanced users with performance concerns. For an easy-to-use method, see
+/// [`Octree::rasterize`].
+pub fn rasterize(cpu: impl Cpu, octree: &Octree, grid: &mut VoxelGrid) {
+    grid.0.rasterize_node(cpu.simd(), octree, octree.root());
 }
 
 trait RasterizeNode {
@@ -77,49 +87,56 @@ impl RasterizeNode for [Voxel; 8] {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::utils::test_all_cpu_levels;
 
     #[test]
     fn rasterize_empty_grid() {
-        let octree = Octree::EMPTY;
+        test_all_cpu_levels!(|cpu| {
+            let octree = Octree::EMPTY;
 
-        let mut grid = VoxelGrid([Voxel { mat: 1, dist: 1 }; _]);
-        rasterize(octree, &mut grid);
+            let mut grid = VoxelGrid([Voxel { mat: 1, dist: 1 }; _]);
+            rasterize(cpu, octree, &mut grid);
 
-        let expect = VoxelGrid::EMPTY;
-        assert_eq!(grid, expect);
+            let expect = VoxelGrid::EMPTY;
+            assert_eq!(grid, expect);
+        });
     }
 
     #[test]
     fn rasterize_sphere_grid() {
-        let octree = Octree::new(bytemuck::cast_slice({
-            include_bytes!("../tests/cases/sphere-octree.bin")
-        }));
+        test_all_cpu_levels!(|cpu| {
+            let octree = Octree::new(bytemuck::cast_slice({
+                include_bytes!("../tests/cases/sphere-octree.bin")
+            }));
 
-        let mut grid = VoxelGrid::EMPTY;
-        rasterize(octree, &mut grid);
+            let mut grid = VoxelGrid::EMPTY;
+            rasterize(cpu, octree, &mut grid);
 
-        let expect = const {
-            VoxelGrid(bytemuck::must_cast(*include_bytes!("../tests/cases/sphere-grid.bin")))
-        };
-        assert_eq!(grid, expect);
+            let expect = const {
+                VoxelGrid(bytemuck::must_cast(*include_bytes!("../tests/cases/sphere-grid.bin")))
+            };
+            assert_eq!(grid, expect);
+        });
     }
 
     #[test]
     fn rasterize_sphere_then_empty() {
-        let mut grid = VoxelGrid::EMPTY;
+        test_all_cpu_levels!(|cpu| {
+            let mut grid = VoxelGrid::EMPTY;
 
-        let octree = Octree::new(bytemuck::cast_slice({
-            include_bytes!("../tests/cases/sphere-octree.bin")
-        }));
-        rasterize(octree, &mut grid);
-        let expect = const {
-            VoxelGrid(bytemuck::must_cast(*include_bytes!("../tests/cases/sphere-grid.bin")))
-        };
-        assert_eq!(grid, expect);
+            let octree = Octree::new(bytemuck::cast_slice({
+                include_bytes!("../tests/cases/sphere-octree.bin")
+            }));
+            rasterize(cpu, octree, &mut grid);
+            let expect = const {
+                VoxelGrid(bytemuck::must_cast(*include_bytes!("../tests/cases/sphere-grid.bin")))
+            };
+            assert_eq!(grid, expect);
 
-        let octree = Octree::EMPTY;
-        rasterize(octree, &mut grid);
-        let expect = VoxelGrid::EMPTY;
-        assert_eq!(grid, expect);
+            let octree = Octree::EMPTY;
+            rasterize(cpu, octree, &mut grid);
+            let expect = VoxelGrid::EMPTY;
+            assert_eq!(grid, expect);
+        });
     }
 }
