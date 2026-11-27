@@ -1,4 +1,4 @@
-use std::{alloc, array, fmt, iter, mem::MaybeUninit, num::NonZero, ptr};
+use std::{alloc, array, fmt, iter, mem::MaybeUninit, num::NonZero, panic, ptr};
 use gnat::array::CopyArr as Arr;
 use crate::{
     utils::{simd::*, Cpu, CpuLevel, CpuDispatch, dispatch_cpu},
@@ -33,7 +33,8 @@ pub(crate) fn derasterize_method_impl<O: OctreeBuffer<Alloc = alloc::Global>>(
 /// Needed by [`derasterize`].
 ///
 /// The layout of this type depends on the instruction set level available on the current CPU.
-#[derive(Debug, Copy, Clone)]
+///
+/// This type is somewhat large. Be careful with moving it by value.
 pub struct DerasterScratch<C: Cpu> {
     cpu: C,
     layers: OctreeLayers<C::Simd>,
@@ -49,6 +50,27 @@ impl<C: Cpu> DerasterScratch<C> {
         }
     }
 }
+
+impl<C: Cpu> fmt::Debug for DerasterScratch<C> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("DerasterScratch")
+            .field("cpu", &self.cpu)
+            .field("layers", &self.layers)
+            .finish()
+    }
+}
+
+// SAFETY: The type is trivially `Send`, we just override the `auto` implementation to remove the
+// dependency on `C` because it has an insane bound.
+unsafe impl<C: Cpu> Send for DerasterScratch<C> { }
+
+// SAFETY: The type is trivially `Sync`, we just override the `auto` implementation to remove the
+// dependency on `C` because it has an insane bound.
+unsafe impl<C: Cpu> Sync for DerasterScratch<C> { }
+
+impl<C: Cpu> Unpin for DerasterScratch<C> { }
+impl<C: Cpu> panic::UnwindSafe for DerasterScratch<C> { }
+impl<C: Cpu> panic::RefUnwindSafe for DerasterScratch<C> { }
 
 /// Build an octree from a voxel grid.
 ///
