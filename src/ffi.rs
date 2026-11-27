@@ -50,6 +50,7 @@ pub trait SharedOctreeExt: Sized + seal_shared_octree_ext::Sealed {
 ///
 /// This type can be passed over FFI. To avoid a memory leak, it must be passed back to Rust and
 /// converted back to a [`SharedOctree`] to drop it. The data pointed to must not be modified.
+#[derive(Debug)]
 #[repr(C)]
 pub struct SharedOctreePtr {
     /// A pointer to the first byte of the octree.
@@ -58,6 +59,14 @@ pub struct SharedOctreePtr {
     /// The length of the octree in bytes.
     pub len: i32,
 }
+
+// SAFETY: `SharedOctreePtr` provides no safe APIs, and regardless the `SharedOctree` it represents
+// is `Send`.
+unsafe impl Send for SharedOctreePtr { }
+
+// SAFETY: `SharedOctreePtr` provides no safe APIs, and regardless the `SharedOctree` it represents
+// is `Sync`.
+unsafe impl Sync for SharedOctreePtr { }
 
 mod seal_shared_octree_ext {
     // SAFETY: The type must be `SharedOctree` and the implementation of `SharedOctreeExt` must be
