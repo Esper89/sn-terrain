@@ -1,6 +1,8 @@
 #![warn(
-    missing_docs, clippy::missing_safety_doc,
-    clippy::ptr_as_ptr, clippy::undocumented_unsafe_blocks,
+    missing_docs, clippy::undocumented_unsafe_blocks, clippy::ptr_as_ptr, clippy::manual_assert,
+)]
+#![allow(
+    clippy::missing_safety_doc, clippy::type_complexity,
 )]
 //! Subnautica modding tools for terrain editing and patching.
 //!
@@ -28,6 +30,7 @@ mod octree;
 mod valid;
 mod voxels;
 mod rasterize;
+mod derasterize;
 mod world;
 
 pub mod utils;
@@ -40,6 +43,7 @@ pub use octree::{Octree, SharedOctree, Octnode};
 pub use valid::{MaterialIndex, SignedDistance};
 pub use voxels::{VoxelGrid, Voxel, ValidVoxelGrid, ValidVoxel};
 pub use rasterize::rasterize;
+pub use derasterize::{OctreeBuffer, DerasterScratch, derasterize};
 pub use world::{World, BatchOctrees, BatchPos, OctreeOffset, OctreePos};
 
 pub mod error {

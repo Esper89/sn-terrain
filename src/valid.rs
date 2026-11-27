@@ -228,14 +228,12 @@ unsafe impl bytemuck::Contiguous for MaterialIndex {
 unsafe impl bytemuck::ZeroableInOption for MaterialIndex { }
 
 const _: () = {
-    if mem::size_of::<Option<MaterialIndex>>() != 1 {
-        panic!("option material niche optimization not active")
-    }
+    assert!(mem::size_of::<Option<MaterialIndex>>() == 1);
 
     // SAFETY: `Option<MaterialIndex>` is one byte in size, and an `Option` of an inhabited type
     // must at minimum store one bit of information, so that single byte must be initialized.
     let niche = unsafe { mem::transmute::<Option<MaterialIndex>, u8>(None) };
-    if niche != 0 { panic!("option material niche optimization picked wrong niche") }
+    assert!(niche == 0);
 };
 
 seq_macro::seq!(N in 1..=254 {
@@ -498,14 +496,12 @@ unsafe impl bytemuck::Contiguous for SignedDistance {
 unsafe impl bytemuck::ZeroableInOption for SignedDistance { }
 
 const _: () = {
-    if mem::size_of::<Option<SignedDistance>>() != 1 {
-        panic!("option distance niche optimization not active")
-    }
+    assert!(mem::size_of::<Option<SignedDistance>>() == 1);
 
     // SAFETY: `Option<SignedDistance>` is one byte in size, and an `Option` of an inhabited type
     // must at minimum store one bit of information, so that single byte must be initialized.
     let niche = unsafe { mem::transmute::<Option<SignedDistance>, u8>(None) };
-    if niche != 0 { panic!("option distance niche optimization picked wrong niche") }
+    assert!(niche == 0);
 };
 
 seq_macro::seq!(N in 1..=252 {

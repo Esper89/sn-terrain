@@ -1,6 +1,7 @@
-use fearless_simd::Simd;
-use fearless_simd_macros::simd;
-use crate::{utils::{Cpu, CpuLevel, CpuDispatch, dispatch_cpu}, Octree, Octnode, VoxelGrid, Voxel};
+use crate::{
+    utils::{simd::*, Cpu, CpuLevel, CpuDispatch, dispatch_cpu},
+    Octree, Octnode, VoxelGrid, Voxel,
+};
 
 #[inline(always)]
 pub(crate) fn rasterize_method_impl(octree: &Octree) -> VoxelGrid {
@@ -9,7 +10,7 @@ pub(crate) fn rasterize_method_impl(octree: &Octree) -> VoxelGrid {
         type Output = ();
 
         #[inline(always)]
-        fn dispatch<C: Cpu>(self, cpu: C) {
+        fn dispatch(self, cpu: impl Cpu) {
             let Rasterize(octree, grid) = self;
             rasterize(cpu, octree, grid);
         }
@@ -20,6 +21,8 @@ pub(crate) fn rasterize_method_impl(octree: &Octree) -> VoxelGrid {
     grid
 }
 
+// TODO: relax initialization requirement for voxel grid
+
 /// Draw an octree to a voxel grid.
 ///
 /// The material and distance values of the nodes in the octree are preserved exactly. Nodes with
@@ -27,14 +30,18 @@ pub(crate) fn rasterize_method_impl(octree: &Octree) -> VoxelGrid {
 /// five levels, and nodes that have one of their ancestors as their child will still be descended
 /// as though the tree structure were valid.
 ///
-/// This function is for advanced users with performance concerns. For an easy-to-use method, see
-/// [`Octree::rasterize`].
+/// This function is fastest when used on octrees that are in depth-first order.
+///
+/// The voxel grid can be built back into an octree with [`derasterize`](crate::derasterize).
+///
+/// This function is for advanced users and users with performance concerns. For an easy-to-use
+/// method, see [`Octree::rasterize`].
 pub fn rasterize(cpu: impl Cpu, octree: &Octree, grid: &mut VoxelGrid) {
     grid.0.rasterize_node(cpu.simd(), octree, octree.root());
 }
 
 trait RasterizeNode {
-    fn rasterize_node(&mut self, simd: impl Simd, octree: &Octree, node: &Octnode);
+    fn rasterize_node(&mut self, simd: impl SimdExt, octree: &Octree, node: &Octnode);
 }
 
 macro_rules! impl_rasterize_node {
@@ -42,7 +49,7 @@ macro_rules! impl_rasterize_node {
         impl RasterizeNode for [Voxel; $vol] {
             #[simd]
             #[inline(always)]
-            fn rasterize_node(&mut self, simd: impl Simd, octree: &Octree, node: &Octnode) {
+            fn rasterize_node(&mut self, simd: impl SimdExt, octree: &Octree, node: &Octnode) {
                 match octree.node_children(node) {
                     Some(children) => {
                         let voxels: &mut [[Voxel; $next]; 8] = bytemuck::must_cast_mut(self);
@@ -69,7 +76,7 @@ impl_rasterize_node!(32768 => 4096 => 512 => 64 => 8);
 impl RasterizeNode for [Voxel; 8] {
     #[simd]
     #[inline(always)]
-    fn rasterize_node(&mut self, simd: impl Simd, octree: &Octree, node: &Octnode) {
+    fn rasterize_node(&mut self, simd: impl SimdExt, octree: &Octree, node: &Octnode) {
         *self = match octree.node_children(node) {
             Some(children) => {
                 let children: [u32; 8] = bytemuck::must_cast(*children);
@@ -98,7 +105,7 @@ mod test {
             rasterize(cpu, octree, &mut grid);
 
             let expect = VoxelGrid::EMPTY;
-            assert_eq!(grid, expect);
+            assert_eq!(grid, expect, "{cpu:?}");
         });
     }
 
@@ -115,7 +122,7 @@ mod test {
             let expect = const {
                 VoxelGrid(bytemuck::must_cast(*include_bytes!("../tests/cases/sphere-grid.bin")))
             };
-            assert_eq!(grid, expect);
+            assert_eq!(grid, expect, "{cpu:?}");
         });
     }
 
@@ -131,12 +138,12 @@ mod test {
             let expect = const {
                 VoxelGrid(bytemuck::must_cast(*include_bytes!("../tests/cases/sphere-grid.bin")))
             };
-            assert_eq!(grid, expect);
+            assert_eq!(grid, expect, "{cpu:?}");
 
             let octree = Octree::EMPTY;
             rasterize(cpu, octree, &mut grid);
             let expect = VoxelGrid::EMPTY;
-            assert_eq!(grid, expect);
+            assert_eq!(grid, expect, "{cpu:?}");
         });
     }
 }

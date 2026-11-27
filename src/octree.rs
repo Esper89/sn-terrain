@@ -1,4 +1,4 @@
-use std::{alloc, fmt, mem, num::NonZero, ops, ptr};
+use std::{alloc, fmt, mem, num::NonZero, ops, iter, ptr};
 use triomphe::ThinArc;
 
 /// A terrain octree in the game's data format.
@@ -140,7 +140,7 @@ impl Octree {
     /// If the input array is empty or contains more than [`u16::MAX`] nodes, this will panic at
     /// compile-time.
     pub const fn new_array<const N: usize>(nodes: &[Octnode; N]) -> &Self {
-        const { if N == 0 || N > u16::MAX as usize { panic!("invalid octree length") } }
+        const { assert!(N != 0 && N <= u16::MAX as usize, "invalid octree length"); }
 
         // SAFETY: The length of `nodes` fits in a `NonZero<u16>`.
         unsafe { Octree::new_unchecked(nodes) }
@@ -151,7 +151,7 @@ impl Octree {
     /// If the input array is empty or contains more than [`u16::MAX`] nodes, this will panic at
     /// compile-time.
     pub const fn new_array_mut<const N: usize>(nodes: &mut [Octnode; N]) -> &mut Self {
-        const { if N == 0 || N > u16::MAX as usize { panic!("invalid octree length") } }
+        const { assert!(N != 0 && N <= u16::MAX as usize, "invalid octree length"); }
 
         // SAFETY: The length of `nodes` fits in a `NonZero<u16>`.
         unsafe { Octree::new_unchecked_mut(nodes) }
@@ -164,7 +164,7 @@ impl Octree {
     pub fn new_array_boxed<const N: usize, A: alloc::Allocator>(
         nodes: Box<[Octnode; N], A>
     ) -> Box<Self, A> {
-        const { if N == 0 || N > u16::MAX as usize { panic!("invalid octree length") } }
+        const { assert!(N != 0 && N <= u16::MAX as usize, "invalid octree length") }
 
         // SAFETY: The length of `nodes` fits in a `NonZero<u16>`.
         unsafe { Octree::new_unchecked_boxed(nodes) }
@@ -173,11 +173,7 @@ impl Octree {
     /// Allocate a boxed octree with `len` empty nodes.
     pub fn alloc_zeroed<A: alloc::Allocator>(len: NonZero<u16>, alloc: A) -> Box<Self, A> {
         let len = len.get() as usize;
-        const {
-            if alloc::Layout::array::<Octnode>(u16::MAX as usize).is_err() {
-                panic!("max octree size should be valid")
-            }
-        }
+        const { assert!(alloc::Layout::array::<Octnode>(u16::MAX as usize).is_ok()); }
 
         // SAFETY: `len` could not possibly produce an invalid layout size per constant assertion.
         let layout = unsafe { alloc::Layout::array::<Octnode>(len).unwrap_unchecked() };
@@ -326,8 +322,11 @@ impl Octree {
     ///
     /// _See the [`rasterize`](crate::rasterize) function for details._
     ///
-    /// This method is an easy-to-use wrapper. If you have performance concerns, use the
-    /// [`rasterize`](crate::rasterize) function.
+    /// The voxel grid can be converted back into an octree with
+    /// [`VoxelGrid::derasterize`](crate::VoxelGrid::derasterize).
+    ///
+    /// This method is an easy-to-use wrapper. If you have performance concerns or need more
+    /// flexibility, use the [`rasterize`](crate::rasterize) function.
     #[inline]
     pub fn rasterize(&self) -> crate::VoxelGrid {
         crate::rasterize::rasterize_method_impl(self)
@@ -400,7 +399,8 @@ impl<A: alloc::Allocator + Clone> Clone for Box<Octree, A> {
 /// using a heap-allocated buffer. On both 32- and 64-bit platforms, both this type and an
 /// [`Option`] of it are 8 bytes.
 ///
-/// `Option<SharedOctree>::None` is guaranteed to be represented as all-zero bytes.
+/// `Option<SharedOctree>::None` is guaranteed to be represented as all-zero bytes. While this type
+/// does [`Deref`](ops::Deref) to an [`Octree`], it does not necessarily point to a stable location.
 #[repr(C)]
 pub struct SharedOctree {
     // INVARIANT: `ptr` may not be constructed from a pointer with provenance at compile-time.
@@ -489,6 +489,41 @@ impl SharedOctree {
         } else {
             0
         }
+    }
+
+    pub(crate) fn alloc_heap_ptr(len: NonZero<u16>) -> Option<ptr::NonNull<[Octnode]>> {
+        if len.get() == 1 {
+            None
+        } else {
+            let iter = iter::repeat_n(mem::MaybeUninit::uninit(), len.get() as usize);
+            let arc = ThinArc::<(), mem::MaybeUninit<Octnode>>::from_header_and_iter((), iter);
+            let ptr = triomphe::Arc::into_raw(triomphe::Arc::from_thin(arc));
+
+            // SAFETY: The pointer returned by `into_raw` includes the length header, so we skip
+            // past that to get the pointer to the actual octree buffer.
+            let ptr = unsafe { ptr.byte_add(mem::size_of::<usize>()) as *mut [Octnode] };
+
+            // SAFETY: The pointer returned by `into_raw` is never null, and regardless we just
+            // added to it.
+            let ptr = unsafe { ptr::NonNull::new_unchecked(ptr) };
+            Some(ptr)
+        }
+    }
+
+    // SAFETY: `ptr` must have been returned from `alloc_heap_ptr`. The address, provenance, and
+    // length must be unmodified and it must be unique. All nodes must have been initialized.
+    pub(crate) unsafe fn from_heap_ptr(ptr: ptr::NonNull<[Octnode]>) -> Self {
+        type ArcTarget = triomphe::HeaderSlice<triomphe::HeaderWithLength<()>, [Octnode]>;
+        let ptr = ptr.as_ptr() as *const ArcTarget;
+
+        // SAFETY: The pointer needed by `from_raw` required the length header, so we move the
+        // pointer back to get it.
+        let ptr = unsafe { ptr.byte_sub(mem::size_of::<usize>()) };
+
+        // SAFETY: `ptr` was originally produced by `triomphe::Arc::into_raw`.
+        let arc = unsafe { triomphe::Arc::into_thin(triomphe::Arc::from_raw(ptr)) };
+
+        SharedOctree::new_heap(arc)
     }
 
     const fn new_inline(nodes: [Octnode; 1]) -> Self {
@@ -599,35 +634,22 @@ unsafe impl Sync for SharedOctree { }
 unsafe impl bytemuck::ZeroableInOption for SharedOctree { }
 
 const _: () = {
-    if mem::size_of::<ThinArc<(), Octnode>>() != mem::size_of::<ptr::NonNull<()>>() {
-        panic!("thin arc not ptr sized")
-    }
-
-    if mem::align_of::<ThinArc<(), Octnode>>() != mem::align_of::<ptr::NonNull<()>>() {
-        panic!("thin arc not ptr aligned")
-    }
-
-    if mem::size_of::<Option<ThinArc<(), Octnode>>>() != mem::size_of::<ThinArc<(), Octnode>>() {
-        panic!("thin arc has no niche")
-    }
+    assert!(mem::size_of::<ThinArc<(), Octnode>>() == mem::size_of::<ptr::NonNull<()>>());
+    assert!(mem::align_of::<ThinArc<(), Octnode>>() == mem::align_of::<ptr::NonNull<()>>());
+    assert!(
+        mem::size_of::<Option<ThinArc<(), Octnode>>>() == mem::size_of::<ThinArc<(), Octnode>>()
+    );
 
     // SAFETY: `ThinArc` is currently implemented as a `repr(transparent)` wrapper around
     // `ptr::NonNull`, meaning all of the bytes of `Option<ThinArc>::None` are initialized. We
     // depend on an exact version of `triomphe` to prevent this from changing.
     let niche = unsafe { mem::transmute::<Option<ThinArc<(), Octnode>>, *const ()>(None) };
-    if !niche.is_null() {
-        panic!("thin arc niche is not at zero")
-    }
+    assert!(niche.is_null());
 };
 
 const _: () = {
-    if mem::size_of::<SharedOctree>() < 5 {
-        panic!("shared octree too small")
-    }
-
-    if mem::size_of::<Option<SharedOctree>>() != mem::size_of::<SharedOctree>() {
-        panic!("shared octree has no niche")
-    }
+    assert!(mem::size_of::<SharedOctree>() >= 5);
+    assert!(mem::size_of::<Option<SharedOctree>>() == mem::size_of::<SharedOctree>());
 
     let none = Option::<SharedOctree>::None;
 
@@ -641,9 +663,7 @@ const _: () = {
         *(&raw const none).byte_add(mem::offset_of!(SharedOctree, ptr)).cast::<*const ()>()
     };
 
-    if !niche.is_null() {
-        panic!("shared octree niche is not at zero")
-    }
+    assert!(niche.is_null());
     mem::forget(none);
 };
 
@@ -681,9 +701,9 @@ impl crate::ffi::SharedOctreeExt for SharedOctree {
         // initialized. `Octnode` is `bytemuck::Pod`.
         let [root] = unsafe { *(&raw const self).cast::<[Octnode; 1]>().byte_add(1) };
 
-        static ROOT_NODES: [[Octnode; 1]; 1 << 16] = seq_macro::seq!(N in 0x0000..=0xFFFF {
+        static ROOT_NODES: [[Octnode; 1]; 1 << 16] = seq_macro::seq!(N in 0x0000u16..=0xFFFF {
             [#({
-                let [mat, dist] = (N as u16).to_le_bytes();
+                let [mat, dist] = N.to_le_bytes();
                 [Octnode { mat, dist, child: 0 }]
             },)*]
         });

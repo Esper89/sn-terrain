@@ -1,7 +1,8 @@
 use std::fmt::Debug;
-use fearless_simd::{prelude::*, Level as SimdLevel};
+use fearless_simd::Level as SimdLevel;
+use crate::utils::simd::SimdExt;
 
-/// The instruction set level available on the current CPU.
+/// A zero-sized token type indicating the instruction set level available on the current CPU.
 ///
 /// No public types implement this trait, and it is sealed. To get an instance of a type
 /// implementing this trait, you will have to implement [`CpuDispatch`] and then call
@@ -14,16 +15,16 @@ mod seal_cpu {
     use super::*;
 
     pub trait Sealed {
-        type Simd: Simd;
+        type Simd: SimdExt;
         fn simd(self) -> Self::Simd;
     }
 }
 
 #[derive(Debug, Copy, Clone)]
-struct CpuImpl<S: Simd>(S);
+struct CpuImpl<S: SimdExt>(S);
 
-impl<S: Simd> Cpu for CpuImpl<S> { }
-impl<S: Simd> CpuSealed for CpuImpl<S> {
+impl<S: SimdExt> Cpu for CpuImpl<S> { }
+impl<S: SimdExt> CpuSealed for CpuImpl<S> {
     type Simd = S;
 
     #[inline(always)]
@@ -63,7 +64,7 @@ pub trait CpuDispatch {
     type Output;
 
     /// The generic function that receives a [`Cpu`].
-    fn dispatch<C: Cpu>(self, cpu: C) -> Self::Output;
+    fn dispatch(self, cpu: impl Cpu) -> Self::Output;
 }
 
 /// Dispatch a function that is generic over instruction set levels.
@@ -130,6 +131,8 @@ pub fn dispatch_cpu_all(dispatch: impl CpuDispatch<Output = ()> + Clone) {
                 dispatch.clone().dispatch(CpuImpl(simd));
             }
         },
+
+        _ => { },
     }
 
     dispatch.dispatch(CpuImpl(fearless_simd::Fallback::new()));
@@ -146,7 +149,7 @@ macro_rules! test_all_cpu_levels {
 
         impl $crate::utils::CpuDispatch for __TestAllCpuLevelsImpl {
             type Output = ();
-            fn dispatch<C: $crate::utils::Cpu>(self, $cpu: C) { $expr }
+            fn dispatch(self, $cpu: impl $crate::utils::Cpu) { $expr }
         }
 
         $crate::utils::dispatch_cpu_all(__TestAllCpuLevelsImpl);

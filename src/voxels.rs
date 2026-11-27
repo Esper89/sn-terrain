@@ -1,4 +1,4 @@
-use std::mem;
+use std::{alloc, mem};
 use crate::{MaterialIndex, SignedDistance};
 
 /// An octree-sized terrain voxel grid with voxels in the game's data format.
@@ -28,6 +28,20 @@ impl VoxelGrid {
     /// Output index will be in range 1–32 767. Input coordinates should be in range 0–31.
     /// Out-of-range inputs may cause panics or nonsense results.
     pub const fn index([x, y, z]: [i32; 3]) -> usize { voxel_grid_index([x, y, z]) }
+
+    /// Convert a voxel grid to an octree.
+    ///
+    /// _See the [`derasterize`](crate::derasterize) function for details._
+    ///
+    /// The octree can be converted back into a voxel grid with
+    /// [`Octree::rasterize`](crate::Octree::rasterize).
+    ///
+    /// This method is an easy-to-use wrapper. If you have performance concerns or need more
+    /// flexibility, use the [`derasterize`](crate::derasterize) function.
+    #[inline]
+    pub fn derasterize<O: crate::OctreeBuffer<Alloc = alloc::Global>>(&self) -> O {
+        crate::derasterize::derasterize_method_impl(self)
+    }
 }
 
 impl Default for VoxelGrid {
@@ -289,13 +303,12 @@ unsafe impl bytemuck::CheckedBitPattern for ValidVoxel {
 }
 
 const _: () = {
-    if mem::size_of::<ValidVoxel>() != 2 || mem::align_of::<ValidVoxel>() != 2 {
-        panic!("invalid voxel size or alignment")
-    }
+    assert!(mem::size_of::<ValidVoxel>() == 2);
+    assert!(mem::align_of::<ValidVoxel>() == 2);
 
     // SAFETY: `ValidVoxel` is two bytes in size and both bytes are always initialized.
     let niches = unsafe { mem::transmute::<ValidVoxel, u16>(ValidVoxel::empty()) };
-    if niches != 0 { panic!("voxel option niche optimizations picked wrong niches") }
+    assert!(niches == 0)
 };
 
 #[expect(clippy::identity_op)]
