@@ -5,7 +5,3 @@
 //! This module requires the `editor` crate feature.
 //!
 //! [editor]: https://github.com/jbeast291/SubnauticaWorldEditor
-
-mod world_cache;
-
-pub use world_cache::WorldCache;

@@ -44,7 +44,7 @@ pub use valid::{MaterialIndex, SignedDistance};
 pub use voxels::{VoxelGrid, Voxel, ValidVoxelGrid, ValidVoxel};
 pub use rasterize::rasterize;
 pub use derasterize::{OctreeBuffer, DerasterScratch, derasterize};
-pub use world::{World, BatchOctrees, BatchPos, OctreeOffset, OctreePos};
+pub use world::{World, WorldCache, BatchOctrees, BatchPos, OctreeOffset, OctreePos};
 
 pub mod error {
     //! Error types produced in this crate.

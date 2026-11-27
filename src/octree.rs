@@ -481,7 +481,6 @@ impl SharedOctree {
         }
     }
 
-    #[cfg(feature = "editor")]
     pub(crate) fn heap_space(&self) -> usize {
         let len = self.len().get() as usize;
         if len > 1 {
