@@ -56,9 +56,12 @@ impl<C: Cpu> DerasterScratch<C> {
 /// values of their corresponding voxels. Higher nodes, including parent nodes, are computed from
 /// their direct children: their material index is the most frequent material index among their
 /// children (preferring surface nodes) and their signed distance is the mean of their children's
-/// signed distances (rounding ties towards even) when any of their children are surface nodes. If
-/// a node has no grandchildren and all of its children are fully solid, all are fully empty, or all
-/// are identical, the node's children will be collapsed and they will not appear in the octree.
+/// signed distances (clamped within range, rounding ties towards even) when any of their children
+/// are surface nodes. For the purposes of computing higher nodes in the octree, voxels with no
+/// material are always considered to have no signed distance.
+///
+/// If a node has no grandchildren and all of its children are fully solid, all are fully empty, or
+/// all are identical, the node's children will be collapsed and they will not appear in the octree.
 /// When a node's children are collapsed, the resulting node gets the most frequent material index
 /// among its children. This means that the materials of fully sold voxels are not completely
 /// preserved.
@@ -272,7 +275,7 @@ fn calc_layer_chunk<S: SimdExt>(
         mat[i].simd_eq(S::u8s::splat(simd, 0))
     });
     let nonsurface: [S::mask8s; 8] = array::from_fn(#[inline(always)] |i| {
-        dist[i].simd_eq(S::u8s::splat(simd, 0))
+        empty[i] | dist[i].simd_eq(S::u8s::splat(simd, 0))
     });
 
     let mut all_mats_eq = S::mask8s::splat(simd, true);
@@ -297,24 +300,22 @@ fn calc_layer_chunk<S: SimdExt>(
     } else {
         calc_chunk_mat(simd, mat, &empty, &nonsurface)
     };
+    let chunk_empty = chunk_mat.simd_eq(S::u8s::splat(simd, 0));
 
     if is_parent.to_bitmask() == 0 {
         return LayerChunk {
             mat: chunk_mat,
-            dist: dist[0],
+            dist: chunk_empty.select(S::u8s::splat(simd, 0), dist[0]),
             is_parent: S::mask8s::splat(simd, false),
         }
     }
 
     let parent_dist = calc_parent_dist(simd, dist, &empty, &nonsurface);
-    let parent_dist = parent_dist.max({
-        chunk_mat.simd_ne(S::u8s::splat(simd, 0))
-            .select(S::u8s::splat(simd, 1), S::u8s::splat(simd, 0))
-    });
+    let chunk_dist = is_parent.select(parent_dist, dist[0]);
 
     LayerChunk {
         mat: chunk_mat,
-        dist: is_parent.select(parent_dist, dist[0]),
+        dist: chunk_empty.select(S::u8s::splat(simd, 0), chunk_dist),
         is_parent,
     }
 }
@@ -355,7 +356,7 @@ fn calc_parent_dist<S: SimdExt>(
     for i in 0..8 {
         let dist = nonsurface[i].select(
             empty[i].select(S::u8s::splat(simd, 1), S::u8s::splat(simd, 252)),
-            dist[i],
+            dist[i].clamp(S::u8s::splat(simd, 1), S::u8s::splat(simd, 252)),
         );
 
         let (dist_lo, dist_hi) = dist.widen();
@@ -366,6 +367,8 @@ fn calc_parent_dist<S: SimdExt>(
     let mean_hi = (sum_hi + 3 + ((sum_hi >> 3) & 1)) >> 3;
     mean_lo.relaxed_narrow(mean_hi)
 }
+
+// TODO: improve handling of invalid voxel data
 
 #[simd]
 fn emit_octree<S: SimdExt, O: OctreeBuffer>(
