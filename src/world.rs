@@ -1,5 +1,5 @@
 use std::{fmt, fs, hash, io, mem, path::Path, sync::Arc};
-use crate::{GameDir, Octree, SharedOctree};
+use crate::{Game, GameDir, Octree, SharedOctree};
 
 /// A terrain directory of batch files.
 #[derive(Debug, Clone)]
@@ -305,6 +305,7 @@ impl fmt::Display for ValidOctreeOffset {
 /// A terrain directory of batch files that caches octree loading.
 #[derive(Debug)]
 pub struct WorldCache {
+    capacity: usize,
     world: World,
     cache: BatchCache,
 }
@@ -320,10 +321,15 @@ impl WorldCache {
     ///
     /// The maximum capacity is 256 MiB.
     pub fn new(game: GameDir) -> Self {
-        WorldCache {
-            world: World::new(game),
-            cache: new_batch_cache(),
-        }
+        WorldCache::with_capacity(game, 1 << 28)
+    }
+
+    /// Create a world cache for the terrain in the specified game directory with the specified
+    /// maximum capacity in bytes.
+    pub fn with_capacity(game: GameDir, capacity: usize) -> Self {
+        let cache = new_batch_cache(game.game(), capacity);
+        let world = World::new(game);
+        WorldCache { capacity, world, cache }
     }
 
     /// Get an octree by its position, loading it from the game directory if it isn't cached.
@@ -346,8 +352,9 @@ impl WorldCache {
 impl Clone for WorldCache {
     fn clone(&self) -> Self {
         WorldCache {
+            capacity: self.capacity,
             world: self.world.clone(),
-            cache: new_batch_cache(),
+            cache: new_batch_cache(self.world.game.game(), self.capacity),
         }
     }
 }
@@ -374,10 +381,15 @@ type BatchCache = quick_cache::sync::Cache<
     BatchWeighter, hash::BuildHasherDefault<ahash::AHasher>,
 >;
 
-fn new_batch_cache() -> BatchCache {
+fn new_batch_cache(game: Game, capacity: usize) -> BatchCache {
+    let mean_batch_size = match game {
+        Game::Subnautica => 222135,
+        Game::BelowZero => 104919,
+    };
+
     let options = quick_cache::OptionsBuilder::new()
-        .estimated_items_capacity(1 << 12)
-        .weight_capacity(1 << 28)
+        .estimated_items_capacity(capacity.div_ceil(mean_batch_size))
+        .weight_capacity(capacity as u64)
         .hot_allocation(0.9)
         .build()
         .expect("cache options should build");
