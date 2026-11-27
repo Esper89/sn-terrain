@@ -675,6 +675,11 @@ const fn const_deref_thin_arc(arc: &ThinArc<(), Octnode>) -> &[Octnode] {
     &data.slice
 }
 
+const _: () = {
+    const fn assert_send_sync<T: Send + Sync>() { }
+    assert_send_sync::<SharedOctree>();
+};
+
 #[cfg(feature = "ffi")]
 impl crate::ffi::SharedOctreeExt for SharedOctree {
     fn into_ptr(self) -> crate::ffi::SharedOctreePtr {
