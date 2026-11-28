@@ -27,6 +27,11 @@ impl VoxelGrid {
         VoxelGrid(bytemuck::must_cast(bytes))
     }
 
+    /// Get a reference to the bytes of this voxel grid.
+    pub const fn as_bytes(&self) -> &[u8; 65_536] {
+        bytemuck::must_cast_ref(self)
+    }
+
     /// Calculate the X, Y, and Z coordinates of a voxel from its index in the grid.
     ///
     /// Output coordinates will be in range 0–31. Input index must be in range 1–32 767.
@@ -126,6 +131,11 @@ impl ValidVoxelGrid {
     /// Create a voxel grid where all voxels are the same.
     pub const fn all(voxel: ValidVoxel) -> Self {
         ValidVoxelGrid([voxel; _])
+    }
+
+    /// Get a reference to the bytes of this voxel grid.
+    pub const fn as_bytes(&self) -> &[u8; 65_536] {
+        bytemuck::must_cast_ref(self)
     }
 
     /// Calculate the X, Y, and Z coordinates of a voxel from its index in the grid.

@@ -112,6 +112,8 @@ pub fn simd_arr_eq<S: Simd, T: SimdBase<S>, const N: usize>(a: &[T; N], b: &[T; 
 pub trait SimdExt: Simd {
     type Width: gnat::Nat;
 
+    const NAME: &str;
+
     fn downcast_u8s_arr<const N: usize>(
         self,
         arr: [Self::u8s; N],
@@ -126,21 +128,25 @@ pub trait SimdExt: Simd {
 
 impl_simd_ext!(for Fallback {
     type Width = 16;
+    const NAME = "fallback";
 });
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 impl_simd_ext!(for Sse2 {
     type Width = 16;
+    const NAME = "sse2";
 });
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 impl_simd_ext!(for Sse4_2 {
     type Width = 16;
+    const NAME = "sse4.2";
 });
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 impl_simd_ext!(for Avx2 {
     type Width = 32;
+    const NAME = "avx2";
 
     fn downcast_u8s_arr<const N: usize>(
         token,
@@ -164,6 +170,7 @@ impl_simd_ext!(for Avx2 {
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 impl_simd_ext!(for Avx512 {
     type Width = 64;
+    const NAME = "avx512";
 
     fn downcast_u8s_arr<const N: usize>(
         token,
@@ -187,11 +194,13 @@ impl_simd_ext!(for Avx512 {
 #[cfg(target_arch = "aarch64")]
 impl_simd_ext!(for Neon {
     type Width = 16;
+    const NAME = "neon";
 });
 
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
 impl_simd_ext!(for WasmSimd128 {
     type Width = 16;
+    const NAME = "simd128";
 });
 
 const _: () = {
@@ -220,6 +229,7 @@ const _: () = {
 macro_rules! impl_simd_ext {
     (for $ty:ident {
         type Width = $width:literal;
+        const NAME = $name:literal;
 
         $(fn downcast_u8s_arr<const N: usize>(
             $dc_u8sarr_token:ident,
@@ -245,6 +255,7 @@ macro_rules! impl_simd_ext {
     }) => {
         impl SimdExt for $ty {
             type Width = gnat::lit!($width);
+            const NAME: &str = $name;
 
             impl_simd_ext!(@impl dc_u8sarr for $ty $({
                 fn downcast_u8s_arr<const N: usize>(

@@ -94,48 +94,28 @@ impl RasterizeNode for [Voxel; 8] {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{utils::test_all_cpu_levels, include_octree, include_voxel_grid};
+    use crate::{utils::test_all_cpu_levels, test::OctreeCase};
 
     #[test]
-    fn rasterize_empty_grid() {
+    fn rasterize() {
         test_all_cpu_levels!(|cpu| {
-            let octree = Octree::EMPTY;
-
-            let mut grid = VoxelGrid::all(Voxel::new(1, 1));
-            rasterize(cpu, octree, &mut grid);
-
-            let expect = VoxelGrid::EMPTY;
-            assert_eq!(grid, expect, "{cpu:?}");
+            let mut grid = VoxelGrid::EMPTY;
+            for OctreeCase { name, octree, grid: expect, .. } in OctreeCase::all() {
+                super::rasterize(cpu, octree, &mut grid);
+                assert_eq!(&grid, expect, "{name} ({cpu:?})");
+            }
         });
     }
 
     #[test]
-    fn rasterize_sphere_grid() {
-        test_all_cpu_levels!(|cpu| {
-            let octree = include_octree!("../tests/cases/sphere-octree.bin");
-
-            let mut grid = VoxelGrid::EMPTY;
-            rasterize(cpu, octree, &mut grid);
-
-            let expect = include_voxel_grid!("../tests/cases/sphere-grid.bin");
-            assert_eq!(grid, expect, "{cpu:?}");
-        });
-    }
-
-    #[test]
-    fn rasterize_sphere_then_empty() {
+    fn rasterize_vanilla() {
         test_all_cpu_levels!(|cpu| {
             let mut grid = VoxelGrid::EMPTY;
-
-            let octree = include_octree!("../tests/cases/sphere-octree.bin");
-            rasterize(cpu, octree, &mut grid);
-            let expect = include_voxel_grid!("../tests/cases/sphere-grid.bin");
-            assert_eq!(grid, expect, "{cpu:?}");
-
-            let octree = Octree::EMPTY;
-            rasterize(cpu, octree, &mut grid);
-            let expect = VoxelGrid::EMPTY;
-            assert_eq!(grid, expect, "{cpu:?}");
+            for OctreeCase { name, vanilla, grid: expect, .. } in OctreeCase::all() {
+                let Some(octree) = vanilla else { continue };
+                super::rasterize(cpu, octree, &mut grid);
+                assert_eq!(&grid, expect, "{name} ({cpu:?})");
+            }
         });
     }
 }

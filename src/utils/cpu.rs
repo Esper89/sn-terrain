@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 use fearless_simd::Level as SimdLevel;
 use crate::utils::simd::SimdExt;
 
@@ -17,10 +17,11 @@ mod seal_cpu {
     pub trait Sealed {
         type Simd: SimdExt;
         fn simd(self) -> Self::Simd;
+        fn name(self) -> &'static str;
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 struct CpuImpl<S: SimdExt>(S);
 
 impl<S: SimdExt> Cpu for CpuImpl<S> { }
@@ -29,6 +30,14 @@ impl<S: SimdExt> CpuSealed for CpuImpl<S> {
 
     #[inline(always)]
     fn simd(self) -> S { self.0 }
+
+    fn name(self) -> &'static str { S::NAME }
+}
+
+impl<S: SimdExt> Debug for CpuImpl<S> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Debug::fmt(self.name(), f)
+    }
 }
 
 /// A value indicating the instruction set level available on the current CPU.
