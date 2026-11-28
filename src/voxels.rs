@@ -17,6 +17,11 @@ impl VoxelGrid {
     /// A zeroed grid of empty voxels.
     pub const EMPTY: Self = VoxelGrid([Voxel::EMPTY; _]);
 
+    /// Create a voxel grid from an array of bytes.
+    pub const fn from_bytes(bytes: [u8; 65_536]) -> VoxelGrid {
+        VoxelGrid(bytemuck::must_cast(bytes))
+    }
+
     /// Calculate the X, Y, and Z coordinates of a voxel from its index in the grid.
     ///
     /// Output coordinates will be in range 0–31. Input index must be in range 1–32 767.
@@ -75,6 +80,21 @@ pub struct Voxel {
 impl Voxel {
     /// An empty, zeroed voxel.
     pub const EMPTY: Self = Voxel { mat: 0, dist: 0 };
+}
+
+/// Include a binary file as a voxel grid at compile-time.
+///
+/// The binary file should have the exact same byte layout as [`VoxelGrid`], meaning it must be
+/// exactly 65 536 bytes long. This macro produces a constant expression of type [`VoxelGrid`].
+///
+/// The provided path must be a string literal that is valid for [`include_bytes`].
+///
+/// This is useful for tests.
+#[macro_export]
+macro_rules! include_voxel_grid {
+    ($path:expr $(,)?) => {
+        (const { $crate::VoxelGrid::from_bytes(*::core::include_bytes!($path)) })
+    };
 }
 
 /// An octree-sized terrain voxel grid with valid voxels in the game's data format.

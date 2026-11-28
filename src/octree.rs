@@ -1,4 +1,4 @@
-use std::{alloc, fmt, mem, num::NonZero, ops, iter, ptr};
+use std::{alloc, fmt, mem, num::NonZero, ops, iter, ptr, slice};
 use triomphe::ThinArc;
 
 /// A terrain octree in the game's data format.
@@ -165,6 +165,68 @@ impl Octree {
         nodes: Box<[Octnode; N], A>
     ) -> Box<Self, A> {
         const { assert!(N != 0 && N <= u16::MAX as usize, "invalid octree length") }
+
+        // SAFETY: The length of `nodes` fits in a `NonZero<u16>`.
+        unsafe { Octree::new_unchecked_boxed(nodes) }
+    }
+
+    /// Create a reference to an octree from a fixed-length array of bytes.
+    ///
+    /// If the input array is less than 4 bytes long, greater than 262 140 bytes long, or its length
+    /// is not a multiple of 4 bytes, this will panic at compile-time.
+    pub const fn new_byte_array<const N: usize>(bytes: &[u8; N]) -> &Self {
+        let len = const {
+            assert!(N % 4 == 0, "octree size must be a multiple of 4 bytes");
+            let len = N / 4;
+            assert!(len != 0 && len <= u16::MAX as usize, "invalid octree length");
+            len
+        };
+
+        // SAFETY: The pointer and length form a slice that is an exact cast of `bytes`, which is
+        // already a valid reference. `Octnode` has the same alignment as `u8`.
+        let nodes = unsafe { slice::from_raw_parts(bytes.as_ptr().cast::<Octnode>(), len) };
+
+        // SAFETY: The length of `nodes` fits in a `NonZero<u16>`.
+        unsafe { Octree::new_unchecked(nodes) }
+    }
+
+    /// Create an exclusive reference to an octree from a fixed-length array of bytes.
+    ///
+    /// If the input array is less than 4 bytes long, greater than 262 140 bytes long, or its length
+    /// is not a multiple of 4 bytes, this will panic at compile-time.
+    pub const fn new_byte_array_mut<const N: usize>(bytes: &mut [u8; N]) -> &mut Self {
+        let len = const {
+            assert!(N % 4 == 0, "octree size must be a multiple of 4 bytes");
+            let len = N / 4;
+            assert!(len != 0 && len <= u16::MAX as usize, "invalid octree length");
+            len
+        };
+
+        // SAFETY: The pointer and length form a slice that is an exact cast of `bytes`, which is
+        // already a valid reference. `Octnode` has the same alignment as `u8`.
+        let nodes = unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr().cast::<Octnode>(), len) };
+
+        // SAFETY: The length of `nodes` fits in a `NonZero<u16>`.
+        unsafe { Octree::new_unchecked_mut(nodes) }
+    }
+
+    /// Create a boxed octree from a fixed-length boxed array of bytes.
+    pub fn new_byte_array_boxed<const N: usize, A: alloc::Allocator>(
+        bytes: Box<[u8; N], A>,
+    ) -> Box<Octree, A> {
+        let len = const {
+            assert!(N % 4 == 0, "octree size must be a multiple of 4 bytes");
+            let len = N / 4;
+            assert!(len != 0 && len <= u16::MAX as usize, "invalid octree length");
+            len
+        };
+
+        let (ptr, alloc) = Box::into_raw_with_allocator(bytes);
+        let ptr = ptr::slice_from_raw_parts_mut(ptr.cast::<Octnode>(), len);
+
+        // SAFETY: The pointer is a slice that is an exact cast of `bytes`, which was a valid box
+        // allocated with the same allocator. `Octnode` has the same alignment as `u8`.
+        let nodes = unsafe { Box::from_raw_in(ptr, alloc) };
 
         // SAFETY: The length of `nodes` fits in a `NonZero<u16>`.
         unsafe { Octree::new_unchecked_boxed(nodes) }
@@ -387,6 +449,28 @@ impl<A: alloc::Allocator + Default> Default for Box<Octree, A> {
 
 impl<A: alloc::Allocator + Clone> Clone for Box<Octree, A> {
     fn clone(&self) -> Self { self.alloc_cloned(Box::allocator(self).clone()) }
+}
+
+/// Include a binary file as an octree at compile-time.
+///
+/// The binary file should have the exact same byte layout as [`Octree`], meaning its length must be
+/// between 4 and 262 140 bytes long and its length must be a multiple of 4 bytes. The file should
+/// not begin with the octree's length header. This macro produces a constant expression of type
+/// [`&'static Octree`](Octree).
+///
+/// The provided path must be a string literal that is valid for [`include_bytes`].
+///
+/// This is useful for tests.
+#[macro_export]
+macro_rules! include_octree {
+    ($path:expr $(,)?) => {
+        (const {
+            const OCTREE: &'static $crate::Octree =
+                $crate::Octree::new_byte_array(::core::include_bytes!($path));
+
+            OCTREE
+        })
+    };
 }
 
 /// A cheaply-clonable immutable shared terrain octree in the game's data format.

@@ -761,7 +761,7 @@ mod reverse_emit_shared_octree {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::utils::test_all_cpu_levels;
+    use crate::{utils::test_all_cpu_levels, include_octree, include_voxel_grid};
 
     #[test]
     fn derasterize_empty_grid() {
@@ -771,23 +771,21 @@ mod test {
             let mut scratch = DerasterScratch::new(cpu);
             let octree = derasterize::<Box<Octree>>(&mut scratch, &grid, alloc::Global);
 
-            let expect = Octree::EMPTY.nodes();
-            assert_eq!(octree.nodes(), expect, "{cpu:?}");
+            let expect = Octree::EMPTY;
+            assert_eq!(octree.nodes(), expect.nodes(), "{cpu:?}");
         })
     }
 
     #[test]
     fn derasterize_sphere_grid() {
         test_all_cpu_levels!(|cpu| {
-            let grid = const {
-                &VoxelGrid(bytemuck::must_cast(*include_bytes!("../tests/cases/sphere-grid.bin")))
-            };
+            let grid = include_voxel_grid!("../tests/cases/sphere-grid.bin");
 
             let mut scratch = DerasterScratch::new(cpu);
             let octree = derasterize::<Box<Octree>>(&mut scratch, &grid, alloc::Global);
 
-            let expect = bytemuck::cast_slice(include_bytes!("../tests/cases/sphere-octree.bin"));
-            assert_eq!(octree.nodes(), expect, "{cpu:?}");
+            let expect = include_octree!("../tests/cases/sphere-octree.bin");
+            assert_eq!(octree.nodes(), expect.nodes(), "{cpu:?}");
         });
     }
 
@@ -796,17 +794,15 @@ mod test {
         test_all_cpu_levels!(|cpu| {
             let mut scratch = DerasterScratch::new(cpu);
 
-            let grid = const {
-                &VoxelGrid(bytemuck::must_cast(*include_bytes!("../tests/cases/sphere-grid.bin")))
-            };
+            let grid = include_voxel_grid!("../tests/cases/sphere-grid.bin");
             let octree = derasterize::<Box<Octree>>(&mut scratch, &grid, alloc::Global);
-            let expect = bytemuck::cast_slice(include_bytes!("../tests/cases/sphere-octree.bin"));
-            assert_eq!(octree.nodes(), expect, "{cpu:?}");
+            let expect = include_octree!("../tests/cases/sphere-octree.bin");
+            assert_eq!(octree.nodes(), expect.nodes(), "{cpu:?}");
 
             let grid = VoxelGrid::EMPTY;
             let octree = derasterize::<Box<Octree>>(&mut scratch, &grid, alloc::Global);
-            let expect = Octree::EMPTY.nodes();
-            assert_eq!(octree.nodes(), expect, "{cpu:?}");
+            let expect = Octree::EMPTY;
+            assert_eq!(octree.nodes(), expect.nodes(), "{cpu:?}");
         });
     }
 
@@ -815,17 +811,15 @@ mod test {
         test_all_cpu_levels!(|cpu| {
             let mut scratch = DerasterScratch::new(cpu);
 
-            let grid = const {
-                &VoxelGrid(bytemuck::must_cast(*include_bytes!("../tests/cases/sphere-grid.bin")))
-            };
+            let grid = include_voxel_grid!("../tests/cases/sphere-grid.bin");
             let octree = derasterize::<SharedOctree>(&mut scratch, &grid, alloc::Global);
-            let expect = bytemuck::cast_slice(include_bytes!("../tests/cases/sphere-octree.bin"));
-            assert_eq!(octree.nodes(), expect, "{cpu:?}");
+            let expect = include_octree!("../tests/cases/sphere-octree.bin");
+            assert_eq!(octree.nodes(), expect.nodes(), "{cpu:?}");
 
             let grid = VoxelGrid::EMPTY;
             let octree = derasterize::<SharedOctree>(&mut scratch, &grid, alloc::Global);
-            let expect = Octree::EMPTY.nodes();
-            assert_eq!(octree.nodes(), expect, "{cpu:?}");
+            let expect = Octree::EMPTY;
+            assert_eq!(octree.nodes(), expect.nodes(), "{cpu:?}");
         });
     }
 }

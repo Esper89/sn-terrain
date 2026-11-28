@@ -94,7 +94,7 @@ impl RasterizeNode for [Voxel; 8] {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::utils::test_all_cpu_levels;
+    use crate::{utils::test_all_cpu_levels, include_octree, include_voxel_grid};
 
     #[test]
     fn rasterize_empty_grid() {
@@ -112,16 +112,12 @@ mod test {
     #[test]
     fn rasterize_sphere_grid() {
         test_all_cpu_levels!(|cpu| {
-            let octree = Octree::new(bytemuck::cast_slice({
-                include_bytes!("../tests/cases/sphere-octree.bin")
-            }));
+            let octree = include_octree!("../tests/cases/sphere-octree.bin");
 
             let mut grid = VoxelGrid::EMPTY;
             rasterize(cpu, octree, &mut grid);
 
-            let expect = const {
-                VoxelGrid(bytemuck::must_cast(*include_bytes!("../tests/cases/sphere-grid.bin")))
-            };
+            let expect = include_voxel_grid!("../tests/cases/sphere-grid.bin");
             assert_eq!(grid, expect, "{cpu:?}");
         });
     }
@@ -131,13 +127,9 @@ mod test {
         test_all_cpu_levels!(|cpu| {
             let mut grid = VoxelGrid::EMPTY;
 
-            let octree = Octree::new(bytemuck::cast_slice({
-                include_bytes!("../tests/cases/sphere-octree.bin")
-            }));
+            let octree = include_octree!("../tests/cases/sphere-octree.bin");
             rasterize(cpu, octree, &mut grid);
-            let expect = const {
-                VoxelGrid(bytemuck::must_cast(*include_bytes!("../tests/cases/sphere-grid.bin")))
-            };
+            let expect = include_voxel_grid!("../tests/cases/sphere-grid.bin");
             assert_eq!(grid, expect, "{cpu:?}");
 
             let octree = Octree::EMPTY;
