@@ -435,15 +435,21 @@ impl Octree {
     /// Get the children of a node in this octree, if it has children.
     ///
     /// Returns `None` if the node does not have children or if its children would be outside the
-    /// bounds of this octree. The result could still be invalid even if this function returns
-    /// `Some`, if the node's children contain one of its parents.
+    /// bounds of this octree. Also returns `None` if the node has no material index or has no
+    /// signed distance. The result could still be invalid even if this function returns `Some`, if
+    /// the node's children contain one of its parents.
     ///
     /// If the node is not part of this octree, this function may panic, return `None`, or return
     /// nonsense.
     #[inline(always)]
     pub fn node_children(&self, node: &Octnode) -> Option<&[Octnode; 8]> {
         debug_assert!(self.nodes.element_offset(node).is_some(), "node is not in octree");
-        if node.child == 0 { None } else { self.nodes.get(node.child as usize..)?.first_chunk() }
+
+        if node.mat == 0 || node.dist == 0 || node.child == 0 {
+            None
+        } else {
+            self.nodes.get(node.child as usize..)?.first_chunk()
+        }
     }
 }
 
@@ -908,8 +914,8 @@ mod test {
     fn parse_octree() {
         let bytes = &[
             0x09, 0x00,
-            0x04, 0x00, 0x01, 0x00,
-            0x04, 0x00, 0x02, 0x00,
+            0x04, 0x01, 0x01, 0x00,
+            0x04, 0x01, 0x02, 0x00,
             0x03, 0x00, 0x03, 0x00,
             0x04, 0x00, 0x04, 0x00,
             0x03, 0x00, 0x05, 0x00,
@@ -930,9 +936,9 @@ mod test {
         let octree = octree.expect("should be an octree");
 
         assert_eq!(octree.len().get(), 9);
-        assert_eq!(octree.root(), &Octnode::new(4, 0, 1));
+        assert_eq!(octree.root(), &Octnode::new(4, 1, 1));
         assert_eq!(octree.node_children(octree.root()), Some(&[
-            Octnode::new(4, 0, 2),
+            Octnode::new(4, 1, 2),
             Octnode::new(3, 0, 3),
             Octnode::new(4, 0, 4),
             Octnode::new(3, 0, 5),
