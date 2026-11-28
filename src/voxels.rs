@@ -15,7 +15,12 @@ pub struct VoxelGrid(pub [Voxel; 32 * 32 * 32]);
 
 impl VoxelGrid {
     /// A zeroed grid of empty voxels.
-    pub const EMPTY: Self = VoxelGrid([Voxel::EMPTY; _]);
+    pub const EMPTY: Self = VoxelGrid::all(Voxel::EMPTY);
+
+    /// Create a voxel grid where all voxels are the same.
+    pub const fn all(voxel: Voxel) -> Self {
+        VoxelGrid([voxel; _])
+    }
 
     /// Create a voxel grid from an array of bytes.
     pub const fn from_bytes(bytes: [u8; 65_536]) -> VoxelGrid {
@@ -80,6 +85,11 @@ pub struct Voxel {
 impl Voxel {
     /// An empty, zeroed voxel.
     pub const EMPTY: Self = Voxel { mat: 0, dist: 0 };
+
+    /// Create a voxel.
+    pub const fn new(mat: u8, dist: u8) -> Self {
+        Voxel { mat, dist }
+    }
 }
 
 /// Include a binary file as a voxel grid at compile-time.
@@ -111,7 +121,12 @@ pub struct ValidVoxelGrid(pub [ValidVoxel; 32 * 32 * 32]);
 
 impl ValidVoxelGrid {
     /// A zeroed grid of empty voxels.
-    pub const EMPTY: Self = ValidVoxelGrid([ValidVoxel::empty(); _]);
+    pub const EMPTY: Self = ValidVoxelGrid::all(ValidVoxel::EMPTY);
+
+    /// Create a voxel grid where all voxels are the same.
+    pub const fn all(voxel: ValidVoxel) -> Self {
+        ValidVoxelGrid([voxel; _])
+    }
 
     /// Calculate the X, Y, and Z coordinates of a voxel from its index in the grid.
     ///
@@ -160,12 +175,10 @@ pub struct ValidVoxel {
 }
 
 impl ValidVoxel {
-    /// Create a fully empty voxel.
+    /// A fully empty voxel.
     ///
     /// Empty voxels are guaranteed to be stored as zeroed bytes.
-    pub const fn empty() -> Self {
-        ValidVoxel { mat: None, dist: None }
-    }
+    const EMPTY: Self = ValidVoxel { mat: None, dist: None };
 
     /// Create a fully solid voxel with a material type.
     pub const fn solid(mat: MaterialIndex) -> Self {
@@ -327,7 +340,7 @@ const _: () = {
     assert!(mem::align_of::<ValidVoxel>() == 2);
 
     // SAFETY: `ValidVoxel` is two bytes in size and both bytes are always initialized.
-    let niches = unsafe { mem::transmute::<ValidVoxel, u16>(ValidVoxel::empty()) };
+    let niches = unsafe { mem::transmute::<ValidVoxel, u16>(ValidVoxel::EMPTY) };
     assert!(niches == 0)
 };
 

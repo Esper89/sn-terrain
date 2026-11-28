@@ -101,7 +101,7 @@ mod test {
         test_all_cpu_levels!(|cpu| {
             let octree = Octree::EMPTY;
 
-            let mut grid = VoxelGrid([Voxel { mat: 1, dist: 1 }; _]);
+            let mut grid = VoxelGrid::all(Voxel::new(1, 1));
             rasterize(cpu, octree, &mut grid);
 
             let expect = VoxelGrid::EMPTY;

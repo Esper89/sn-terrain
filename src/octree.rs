@@ -1,4 +1,4 @@
-use std::{alloc, fmt, mem, num::NonZero, ops, iter, ptr, slice};
+use std::{alloc, array, fmt, mem, num::NonZero, ops, iter, ptr, slice};
 use triomphe::ThinArc;
 
 /// A terrain octree in the game's data format.
@@ -18,7 +18,7 @@ pub struct Octree {
 
 impl Octree {
     /// An octree with a single empty root node.
-    pub const EMPTY: &Self = Octree::new_array(&[Octnode::EMPTY]);
+    pub const EMPTY: &Self = Octree::from_root(&Octnode::EMPTY);
 
     /// Create a reference to an octree from a slice of nodes.
     ///
@@ -135,11 +135,32 @@ impl Octree {
         unsafe { Box::from_raw_in(ptr as *mut Octree, alloc) }
     }
 
+    /// Create a static reference to an octree containing a single root node from a constant
+    /// material index and signed distance.
+    pub const fn from_root_const<const MAT: u8, const DIST: u8>() -> &'static Self {
+        const { Octree::from_root(const { &Octnode::leaf(MAT, DIST) }) }
+    }
+
+    /// Create a reference to an octree from its root node.
+    pub const fn from_root(root: &Octnode) -> &Self {
+        Octree::from_array(array::from_ref(root))
+    }
+
+    /// Create an exclusive reference to an octree from its root node.
+    pub const fn from_root_mut(root: &mut Octnode) -> &mut Self {
+        Octree::from_array_mut(array::from_mut(root))
+    }
+
+    /// Create a boxed octree from a boxed root node.
+    pub fn from_root_boxed<A: alloc::Allocator>(root: Box<Octnode, A>) -> Box<Self, A> {
+        Octree::from_array_boxed(Box::map(root, |root| [root]))
+    }
+
     /// Create a reference to an octree from a fixed-length array of nodes.
     ///
     /// If the input array is empty or contains more than [`u16::MAX`] nodes, this will panic at
     /// compile-time.
-    pub const fn new_array<const N: usize>(nodes: &[Octnode; N]) -> &Self {
+    pub const fn from_array<const N: usize>(nodes: &[Octnode; N]) -> &Self {
         const { assert!(N != 0 && N <= u16::MAX as usize, "invalid octree length"); }
 
         // SAFETY: The length of `nodes` fits in a `NonZero<u16>`.
@@ -150,7 +171,7 @@ impl Octree {
     ///
     /// If the input array is empty or contains more than [`u16::MAX`] nodes, this will panic at
     /// compile-time.
-    pub const fn new_array_mut<const N: usize>(nodes: &mut [Octnode; N]) -> &mut Self {
+    pub const fn from_array_mut<const N: usize>(nodes: &mut [Octnode; N]) -> &mut Self {
         const { assert!(N != 0 && N <= u16::MAX as usize, "invalid octree length"); }
 
         // SAFETY: The length of `nodes` fits in a `NonZero<u16>`.
@@ -161,7 +182,7 @@ impl Octree {
     ///
     /// If the input array is empty or contains more than [`u16::MAX`] nodes, this will panic at
     /// compile-time.
-    pub fn new_array_boxed<const N: usize, A: alloc::Allocator>(
+    pub fn from_array_boxed<const N: usize, A: alloc::Allocator>(
         nodes: Box<[Octnode; N], A>
     ) -> Box<Self, A> {
         const { assert!(N != 0 && N <= u16::MAX as usize, "invalid octree length") }
@@ -174,7 +195,7 @@ impl Octree {
     ///
     /// If the input array is less than 4 bytes long, greater than 262 140 bytes long, or its length
     /// is not a multiple of 4 bytes, this will panic at compile-time.
-    pub const fn new_byte_array<const N: usize>(bytes: &[u8; N]) -> &Self {
+    pub const fn from_byte_array<const N: usize>(bytes: &[u8; N]) -> &Self {
         let len = const {
             assert!(N % 4 == 0, "octree size must be a multiple of 4 bytes");
             let len = N / 4;
@@ -194,7 +215,7 @@ impl Octree {
     ///
     /// If the input array is less than 4 bytes long, greater than 262 140 bytes long, or its length
     /// is not a multiple of 4 bytes, this will panic at compile-time.
-    pub const fn new_byte_array_mut<const N: usize>(bytes: &mut [u8; N]) -> &mut Self {
+    pub const fn from_byte_array_mut<const N: usize>(bytes: &mut [u8; N]) -> &mut Self {
         let len = const {
             assert!(N % 4 == 0, "octree size must be a multiple of 4 bytes");
             let len = N / 4;
@@ -211,7 +232,7 @@ impl Octree {
     }
 
     /// Create a boxed octree from a fixed-length boxed array of bytes.
-    pub fn new_byte_array_boxed<const N: usize, A: alloc::Allocator>(
+    pub fn from_byte_array_boxed<const N: usize, A: alloc::Allocator>(
         bytes: Box<[u8; N], A>,
     ) -> Box<Octree, A> {
         let len = const {
@@ -466,7 +487,7 @@ macro_rules! include_octree {
     ($path:expr $(,)?) => {
         (const {
             const OCTREE: &'static $crate::Octree =
-                $crate::Octree::new_byte_array(::core::include_bytes!($path));
+                $crate::Octree::from_byte_array(::core::include_bytes!($path));
 
             OCTREE
         })
@@ -528,7 +549,7 @@ impl SharedOctree {
     /// method can be used at compile-time.
     pub const fn as_octree(&self) -> &Octree {
         match self.unpack_ref() {
-            SharedOctreeRef::Inline(nodes) => Octree::new_array(nodes),
+            SharedOctreeRef::Inline(nodes) => Octree::from_array(nodes),
             SharedOctreeRef::Heap(nodes) => {
                 let nodes = const_deref_thin_arc(nodes);
 
@@ -789,15 +810,15 @@ impl crate::ffi::SharedOctreeExt for SharedOctree {
         // initialized. `Octnode` is `bytemuck::Pod`.
         let [root] = unsafe { *(&raw const self).cast::<[Octnode; 1]>().byte_add(1) };
 
-        static ROOT_NODES: [[Octnode; 1]; 1 << 16] = seq_macro::seq!(N in 0x0000u16..=0xFFFF {
+        static ROOT_NODES: [Octnode; 1 << 16] = seq_macro::seq!(N in 0x0000u16..=0xFFFF {
             [#({
-                let [mat, dist] = N.to_le_bytes();
-                [Octnode { mat, dist, child: 0 }]
+                let [m, d] = N.to_le_bytes();
+                Octnode::leaf(m, d)
             },)*]
         });
 
         let idx = u16::from_le_bytes([root.mat, root.dist]) as usize;
-        let root: &'static Octree = Octree::new(&ROOT_NODES[idx]);
+        let root: &'static Octree = Octree::from_root(&ROOT_NODES[idx]);
 
         let ptr = (root as *const Octree).cast::<u8>();
         let len = 4;
@@ -866,7 +887,17 @@ pub struct Octnode {
 
 impl Octnode {
     /// An empty, zeroed leaf node.
-    pub const EMPTY: Self = Octnode { mat: 0, dist: 0, child: 0 };
+    pub const EMPTY: Self = Octnode::leaf(0, 0);
+
+    /// Create a leaf node with a material index and a signed distance.
+    pub const fn leaf(mat: u8, dist: u8) -> Self {
+        Octnode { mat, dist, child: 0 }
+    }
+
+    /// Create a node for an octree.
+    pub const fn new(mat: u8, dist: u8, child: u16) -> Self {
+        Octnode { mat, dist, child }
+    }
 }
 
 #[cfg(test)]
@@ -899,16 +930,16 @@ mod test {
         let octree = octree.expect("should be an octree");
 
         assert_eq!(octree.len().get(), 9);
-        assert_eq!(octree.root(), &Octnode { mat: 4, dist: 0, child: 1 });
+        assert_eq!(octree.root(), &Octnode::new(4, 0, 1));
         assert_eq!(octree.node_children(octree.root()), Some(&[
-            Octnode { mat: 4, dist: 0, child: 2 },
-            Octnode { mat: 3, dist: 0, child: 3 },
-            Octnode { mat: 4, dist: 0, child: 4 },
-            Octnode { mat: 3, dist: 0, child: 5 },
-            Octnode { mat: 4, dist: 0, child: 6 },
-            Octnode { mat: 2, dist: 0, child: 7 },
-            Octnode { mat: 4, dist: 0, child: 8 },
-            Octnode { mat: 2, dist: 0, child: 9 },
+            Octnode::new(4, 0, 2),
+            Octnode::new(3, 0, 3),
+            Octnode::new(4, 0, 4),
+            Octnode::new(3, 0, 5),
+            Octnode::new(4, 0, 6),
+            Octnode::new(2, 0, 7),
+            Octnode::new(4, 0, 8),
+            Octnode::new(2, 0, 9),
         ]));
 
         let (octree, bytes) = Octree::parse(bytes);
@@ -921,7 +952,7 @@ mod test {
         let octree = octree.expect("should be an octree");
 
         assert_eq!(octree.len().get(), 1);
-        assert_eq!(octree.root(), &Octnode { mat: 0, dist: 0, child: u16::MAX });
+        assert_eq!(octree.root(), &Octnode::new(0, 0, u16::MAX));
 
         assert_eq!(bytes, &[0xCC]);
         let (octree, bytes) = Octree::parse(bytes);
@@ -932,15 +963,15 @@ mod test {
     #[test]
     fn shared_octree() {
         let nodes = &[
-            Octnode { mat: 1, dist: 126, child: 1 },
-            Octnode { mat: 1, dist: 126, child: 1000 },
-            Octnode { mat: 2, dist: 126, child: 1000 },
-            Octnode { mat: 3, dist: 126, child: 1000 },
-            Octnode { mat: 4, dist: 126, child: 1000 },
-            Octnode { mat: 5, dist: 126, child: 1000 },
-            Octnode { mat: 6, dist: 126, child: 1000 },
-            Octnode { mat: 7, dist: 126, child: 1000 },
-            Octnode { mat: 8, dist: 126, child: 1000 },
+            Octnode::new(1, 126, 1),
+            Octnode::new(1, 126, 1000),
+            Octnode::new(2, 126, 1000),
+            Octnode::new(3, 126, 1000),
+            Octnode::new(4, 126, 1000),
+            Octnode::new(5, 126, 1000),
+            Octnode::new(6, 126, 1000),
+            Octnode::new(7, 126, 1000),
+            Octnode::new(8, 126, 1000),
         ];
 
         let octree1 = SharedOctree::new(Octree::new(nodes));
@@ -956,11 +987,9 @@ mod test {
         drop(octree1);
         assert_eq!(octree2.ref_count(), 1);
 
-        let inline = SharedOctree::new(Octree::new_array(&[
-            Octnode { mat: 255, dist: 255, child: 65_535 },
-        ]));
+        let inline = SharedOctree::from_root(Octnode::new(255, 255, 65_535));
         assert_eq!(inline.ref_count(), 0);
-        assert_eq!(inline.nodes(), [Octnode { mat: 255, dist: 255, child: 65_535 }]);
+        assert_eq!(inline.nodes(), [Octnode::new(255, 255, 65_535)]);
     }
 
     #[cfg(feature = "ffi")]
@@ -968,15 +997,15 @@ mod test {
     fn shared_octree_ptr() {
         use crate::ffi::SharedOctreeExt;
         let nodes = &[
-            Octnode { mat: 1, dist: 126, child: 1 },
-            Octnode { mat: 1, dist: 126, child: 1000 },
-            Octnode { mat: 2, dist: 126, child: 1000 },
-            Octnode { mat: 3, dist: 126, child: 1000 },
-            Octnode { mat: 4, dist: 126, child: 1000 },
-            Octnode { mat: 5, dist: 126, child: 1000 },
-            Octnode { mat: 6, dist: 126, child: 1000 },
-            Octnode { mat: 7, dist: 126, child: 1000 },
-            Octnode { mat: 8, dist: 126, child: 1000 },
+            Octnode::new(1, 126, 1),
+            Octnode::new(1, 126, 1000),
+            Octnode::new(2, 126, 1000),
+            Octnode::new(3, 126, 1000),
+            Octnode::new(4, 126, 1000),
+            Octnode::new(5, 126, 1000),
+            Octnode::new(6, 126, 1000),
+            Octnode::new(7, 126, 1000),
+            Octnode::new(8, 126, 1000),
         ];
 
         let octree1 = SharedOctree::new(Octree::new(nodes));
@@ -990,10 +1019,7 @@ mod test {
 
         // SAFETY: `octree1` is a valid `SharedOctree` returned by `into_ptr` and its length is
         // guaranteed to be at least one node.
-        assert_eq!(
-            unsafe { *octree1.ptr.cast::<Octnode>() },
-            Octnode { mat: 1, dist: 126, child: 1 },
-        );
+        assert_eq!(unsafe { *octree1.ptr.cast::<Octnode>() }, Octnode::new(1, 126, 1));
 
         // SAFETY: `octree1` came directory from `into_ptr`.
         let octree1 = unsafe { SharedOctree::from_ptr(octree1) };
@@ -1004,13 +1030,11 @@ mod test {
         drop(octree1);
         assert_eq!(octree2.ref_count(), 1);
 
-        let inline = SharedOctree::new(Octree::new_array(&[
-            Octnode { mat: 255, dist: 255, child: 65_535 },
-        ]));
+        let inline = SharedOctree::from_root(Octnode::new(255, 255, 65_535));
         assert_eq!(inline.ref_count(), 0);
 
         // SAFETY: The result of `into_ptr` is directly passed back to `from_ptr`.
         let inline = unsafe { SharedOctree::from_ptr(inline.into_ptr()) };
-        assert_eq!(inline.nodes(), [Octnode { mat: 255, dist: 255, child: 0 }]);
+        assert_eq!(inline.nodes(), [Octnode::new(255, 255, 0)]);
     }
 }
