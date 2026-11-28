@@ -74,13 +74,14 @@ impl<C: Cpu> panic::RefUnwindSafe for DerasterScratch<C> { }
 
 /// Build an octree from a voxel grid.
 ///
-/// The deepest level nodes of the octree, when present, preserve exactly the material and distance
-/// values of their corresponding voxels. Higher nodes, including parent nodes, are computed from
-/// their direct children: their material index is the most frequent material index among their
-/// children (preferring surface nodes) and their signed distance is the mean of their children's
-/// signed distances (clamped within range, rounding ties towards even) when any of their children
-/// are surface nodes. For the purposes of computing higher nodes in the octree, voxels with no
-/// material are always considered to have no signed distance.
+/// If the signed distance values of the voxels are invalid, they are clamped to valid ones. This
+/// includes removing the signed distance entirely from any voxel with no material index.
+///
+/// Nodes at the deepest level of the octree are determined by their corresponding voxels. Parent
+/// nodes are computed from their direct children; their material index is the most frequent
+/// material index among their children (preferring surface nodes) and their signed distance is the
+/// mean of their children's signed distances (clamped within range, rounding ties towards even)
+/// when any of their children are surface nodes.
 ///
 /// If a node has no grandchildren and all of its children are fully solid, all are fully empty, or
 /// all are identical, the node's children will be collapsed and they will not appear in the octree.
@@ -457,7 +458,16 @@ fn emit_grandchildren<S: SimdExt>(
     let mut children = [0; 8];
     for c in (0..8).rev() {
         if is_parent & (1 << c) != 0 {
-            let (grandchildren_lo, grandchildren_hi) = voxels[8 * idx + c].widen();
+            let grandchildren = voxels[8 * idx + c];
+            let mat = grandchildren & 0xFF;
+            let dist = (grandchildren & 0xFF00) >> 8;
+
+            let grandchildren = mat.simd_eq(0).select(
+                u16x8::splat(simd, 0),
+                mat | dist.clamp(u16x8::splat(simd, 0), u16x8::splat(simd, 252)) << 8,
+            );
+
+            let (grandchildren_lo, grandchildren_hi) = grandchildren.widen();
             let grandchildren = grandchildren_lo.combine(grandchildren_hi);
             children[c] = buf.push_siblings(grandchildren) as u32;
         }

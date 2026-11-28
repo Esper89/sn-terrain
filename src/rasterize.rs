@@ -25,11 +25,13 @@ pub(crate) fn rasterize_method_impl(octree: &Octree) -> VoxelGrid {
 
 /// Draw an octree to a voxel grid.
 ///
-/// The material and distance values of the nodes in the octree are preserved exactly, except that
-/// the distance value will always be zero if the material is zero for nodes at levels higher than
-/// the lowest level. Nodes with any out-of-bounds children are treated as leaf nodes. The octree is
-/// not descended more than five levels, and nodes that have one of their ancestors as their child
-/// will still be descended as though the tree structure were valid.
+/// If the signed distance values of the nodes in the octree are invalid, they are clamped to valid
+/// ones. This includes removing the signed distance entirely from any node with no material index.
+///
+/// Nodes are descended as specified in [`node_children`](Octree::node_children); in particular, a
+/// node without a material index or without a signed distance is always considered to be a leaf
+/// node. The octree is not descended more than five levels, and nodes that have one of their
+/// ancestors as their child will still be descended as though the tree structure were valid.
 ///
 /// This function is fastest when used on octrees that are in depth-first order.
 ///
@@ -60,8 +62,14 @@ macro_rules! impl_rasterize_node {
                     },
 
                     None => {
-                        let mut node: u32 = bytemuck::must_cast(*node);
-                        if node & 0xFF == 0 { node = 0; }
+                        let mut node = *node;
+                        if node.mat == 0 {
+                            node.dist = 0;
+                        } else {
+                            node.dist = node.dist.clamp(0, 252);
+                        }
+
+                        let node: u32 = bytemuck::must_cast(node);
                         self.fill(bytemuck::must_cast(node as u16));
                     },
                 }
@@ -81,13 +89,28 @@ impl RasterizeNode for [Voxel; 8] {
     fn rasterize_node(&mut self, simd: impl SimdExt, octree: &Octree, node: &Octnode) {
         *self = match octree.node_children(node) {
             Some(children) => {
-                let children: [u32; 8] = bytemuck::must_cast(*children);
+                let mut children = *children;
+                for child in &mut children {
+                    if child.mat == 0 {
+                        child.dist = 0;
+                    } else {
+                        child.dist = child.dist.clamp(0, 252);
+                    }
+                }
+
+                let children: [u32; 8] = bytemuck::must_cast(children);
                 bytemuck::must_cast(children.map(#[inline(always)] |c| c as u16))
             },
 
             None => {
-                let mut node: u32 = bytemuck::must_cast(*node);
-                if node & 0xFF == 0 { node = 0; }
+                let mut node = *node;
+                if node.mat == 0 {
+                    node.dist = 0;
+                } else {
+                    node.dist = node.dist.clamp(0, 252);
+                }
+
+                let node: u32 = bytemuck::must_cast(node);
                 bytemuck::must_cast([node as u16; 8])
             },
         }

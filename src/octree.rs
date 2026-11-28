@@ -434,13 +434,13 @@ impl Octree {
 
     /// Get the children of a node in this octree, if it has children.
     ///
-    /// Returns `None` if the node does not have children or if its children would be outside the
-    /// bounds of this octree. Also returns `None` if the node has no material index or has no
-    /// signed distance. The result could still be invalid even if this function returns `Some`, if
-    /// the node's children contain one of its parents.
+    /// A node is considered to have children if it has a material index, has a signed distance, and
+    /// all of its children are within the bounds of the octree. It is possible for the index of a
+    /// node's first child to be invalid even when it's considered to have children, if the node's
+    /// children contain one of its ancestors.
     ///
-    /// If the node is not part of this octree, this function may panic, return `None`, or return
-    /// nonsense.
+    /// If the provided node is not part of this octree, this function will panic in debug mode and
+    /// return nonsense in release mode.
     #[inline(always)]
     pub fn node_children(&self, node: &Octnode) -> Option<&[Octnode; 8]> {
         debug_assert!(self.nodes.element_offset(node).is_some(), "node is not in octree");
